@@ -1,0 +1,16 @@
+{
+  "name": "calculator-compiler",
+  "version": "1.0.0",
+  "description": "TypeScript Calculator Compiler with EBNF Grammar",
+  "main": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts",
+    "debug": "bun --inspect-brk run index.ts",
+    "debug-chrome": "bun --inspect-brk run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  },
+  "type": "module"
+}

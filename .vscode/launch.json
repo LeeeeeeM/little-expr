@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Calculator with Bun",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/index.ts",
+            "runtimeExecutable": "bun",
+            "runtimeArgs": ["--inspect", "run"],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "skipFiles": ["<node_internals>/**"],
+            "env": {
+                "NODE_ENV": "development"
+            }
+        },
+        {
+            "name": "Debug Calculator with Chrome",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/index.ts",
+            "runtimeExecutable": "bun",
+            "runtimeArgs": ["--inspect-brk", "run"],
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "skipFiles": ["<node_internals>/**"],
+            "env": {
+                "NODE_ENV": "development"
+            }
+        }
+    ]
+}

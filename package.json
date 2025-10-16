@@ -6,7 +6,17 @@
   "scripts": {
     "start": "bun run index.ts",
     "debug": "bun --inspect-brk run index.ts",
-    "debug-chrome": "bun --inspect-brk run index.ts"
+    "debug-chrome": "bun --inspect-brk run index.ts",
+    "separated": "bun run parser-separated.ts",
+    "precedence": "bun run precedence-climbing.ts",
+    "precedence-separated": "bun run parser-precedence-climbing-separated.ts",
+    "test": "bun run runner.ts test/basic-expressions.txt separated",
+    "test:basic": "bun run runner.ts test/basic-expressions.txt separated",
+    "test:edge": "bun run runner.ts test/edge-cases.txt separated",
+    "test:precedence": "bun run runner.ts test/operator-precedence.txt separated",
+    "test:performance": "bun run runner.ts test/performance.txt separated",
+    "test:precedence-climbing": "bun run runner.ts test/basic-expressions.txt precedence-separated",
+    "test:all": "bun run test:basic && bun run test:edge && bun run test:precedence && bun run test:performance"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -1,6 +1,6 @@
-/* 分离的解析器和代码生成器版本
- * 这个版本将解析和求值/代码生成完全分离
- * 解析器只负责构建AST，代码生成器负责输出汇编
+/* 优先级爬升（Precedence Climbing）方法实现 - 分离版本
+ * 使用单一函数处理所有二元操作符的优先级
+ * 支持AST构建和汇编代码生成
  */
 
 // --- AST节点类型定义 ---
@@ -20,18 +20,20 @@ interface BinaryOpNode extends ASTNode {
     right: ASTNode;
 }
 
-interface UnaryOpNode extends ASTNode {
-    type: 'UnaryOp';
-    operator: string;
-    operand: ASTNode;
-}
-
 // --- 词法分析器 ---
 enum TokenType {
     NUMBER,
     ADD, SUB, MUL, DIV, POWER,
     LEFTPAREN, RIGHTPAREN,
     END
+}
+
+// --- 优先级枚举 ---
+enum Precedence {
+    NONE = 0,      // 无优先级（END token）
+    ADD_SUB = 1,   // 加减运算
+    MUL_DIV = 2,   // 乘除运算
+    POWER = 3      // 指数运算
 }
 
 let src: string = "";
@@ -101,65 +103,30 @@ function getToken(): void {
     }
 }
 
-// --- 纯解析器（只构建AST，不求值） ---
-function parseExpr(): ASTNode {
-    return parseAddSubExpr();
-}
-
-function parseAddSubExpr(): ASTNode {
-    let left = parseMulDivExpr();
+// --- 优先级爬升解析器（构建AST） ---
+function parseExpression(minPrecedence: Precedence = Precedence.NONE): ASTNode {
+    let left = parsePrimary();
     
-    while (token === TokenType.ADD || token === TokenType.SUB) {
-        const operator = token === TokenType.ADD ? '+' : '-';
-        getToken();
-        const right = parseMulDivExpr();
-        left = {
-            type: 'BinaryOp',
-            operator,
-            left,
-            right
-        } as BinaryOpNode;
+    while (true) {
+        const currentToken = token;
+        const precedence = getPrecedence(currentToken);
+        
+        if (precedence < minPrecedence || precedence === Precedence.NONE) {
+            break;
+        }
+        
+        getToken(); // 消费操作符
+        
+        const rightMinPrecedence = precedence + (isRightAssociative(currentToken) ? 0 : 1);
+        const right = parseExpression(rightMinPrecedence);
+        
+        left = createBinaryNode(currentToken, left, right);
     }
     
     return left;
 }
 
-function parseMulDivExpr(): ASTNode {
-    let left = parsePowerExpr();
-    
-    while (token === TokenType.MUL || token === TokenType.DIV) {
-        const operator = token === TokenType.MUL ? '*' : '/';
-        getToken();
-        const right = parsePowerExpr();
-        left = {
-            type: 'BinaryOp',
-            operator,
-            left,
-            right
-        } as BinaryOpNode;
-    }
-    
-    return left;
-}
-
-function parsePowerExpr(): ASTNode {
-    let left = parsePrimaryExpr();
-    
-    while (token === TokenType.POWER) {
-        getToken();
-        const right = parsePowerExpr(); // 右结合性
-        left = {
-            type: 'BinaryOp',
-            operator: '**',
-            left,
-            right
-        } as BinaryOpNode;
-    }
-    
-    return left;
-}
-
-function parsePrimaryExpr(): ASTNode {
+function parsePrimary(): ASTNode {
     switch (token) {
         case TokenType.NUMBER:
             const value = numberVal;
@@ -177,7 +144,7 @@ function parsePrimaryExpr(): ASTNode {
             
         case TokenType.LEFTPAREN:
             getToken();
-            const expr = parseExpr();
+            const expr = parseExpression(Precedence.NONE);
             if (token as TokenType !== TokenType.RIGHTPAREN) {
                 throw new Error("Right paren loss");
             }
@@ -189,7 +156,43 @@ function parsePrimaryExpr(): ASTNode {
     }
 }
 
-// --- AST求值器（用于验证解析正确性） ---
+function getPrecedence(token: TokenType): Precedence {
+    switch (token) {
+        case TokenType.ADD:
+        case TokenType.SUB:
+            return Precedence.ADD_SUB;
+        case TokenType.MUL:
+        case TokenType.DIV:
+            return Precedence.MUL_DIV;
+        case TokenType.POWER:
+            return Precedence.POWER;
+        default:
+            return Precedence.NONE;
+    }
+}
+
+function isRightAssociative(token: TokenType): boolean {
+    return token === TokenType.POWER;
+}
+
+function createBinaryNode(operator: TokenType, left: ASTNode, right: ASTNode): BinaryOpNode {
+    const operatorMap: Map<TokenType, string> = new Map([
+        [TokenType.ADD, '+'],
+        [TokenType.SUB, '-'],
+        [TokenType.MUL, '*'],
+        [TokenType.DIV, '/'],
+        [TokenType.POWER, '**']
+    ]);
+    
+    return {
+        type: 'BinaryOp',
+        operator: operatorMap.get(operator) || 'unknown',
+        left,
+        right
+    };
+}
+
+// --- AST求值器 ---
 function evaluateAST(node: ASTNode): number {
     switch (node.type) {
         case 'Number':
@@ -288,7 +291,7 @@ class AssemblyGenerator {
 
 // --- 主程序 ---
 function main(): void {
-    console.log("分离式解析器演示");
+    console.log("优先级爬升解析器演示 - 分离版本");
     console.log("输入表达式，将生成AST和汇编代码");
     console.log("输入 'exit' 退出");
     
@@ -316,8 +319,8 @@ function main(): void {
             // 1. 词法分析
             getToken();
             
-            // 2. 语法分析 - 构建AST
-            const ast = parseExpr();
+            // 2. 语法分析 - 使用优先级爬升构建AST
+            const ast = parseExpression();
             console.log("\n=== AST结构 ===");
             console.log(JSON.stringify(ast, null, 2));
             

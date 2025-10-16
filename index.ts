@@ -242,6 +242,7 @@ function main(): void {
             return;
         }
         
+        
         src = input;
         console.log();
 

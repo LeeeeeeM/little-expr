@@ -315,6 +315,118 @@ function isRightAssociative(token: TokenType): boolean {
 | **递归深度** | 有限制 | 无限制 |
 | **扩展性** | 需修改多个函数 | 只需修改优先级表 |
 
+### 5. 优先级爬升与逆波兰表达式的相似性
+
+优先级爬升解析器与逆波兰表达式（RPN）处理在算法思想上高度相似：
+
+#### **核心思想相似**
+- **优先级比较机制**: 都通过优先级表决定何时处理操作符
+- **延迟处理策略**: 遇到更高优先级时才处理当前操作符
+- **结合性处理**: 都正确处理左结合和右结合操作符
+
+#### **算法流程对比**
+
+**优先级爬升解析器**:
+```typescript
+function parseExpression(minPrecedence: Precedence): ASTNode {
+    let left = parsePrimary();
+    while (true) {
+        const precedence = getPrecedence(currentToken);
+        if (precedence < minPrecedence) break;
+        // 处理操作符...
+    }
+}
+```
+
+**逆波兰表达式处理**:
+```typescript
+// 伪代码：处理操作符栈
+while (operatorStack.length > 0 && 
+       precedence(operatorStack.top()) >= precedence(currentToken)) {
+    const op = operatorStack.pop();
+    // 处理操作符...
+}
+```
+
+#### **相似性分析表**
+| 特性 | 优先级爬升 | 逆波兰处理 |
+|------|------------|------------|
+| **操作符优先级** | 通过 `getPrecedence()` 比较 | 通过优先级表比较 |
+| **结合性处理** | `rightMinPrecedence` 参数 | 栈顶操作符优先级比较 |
+| **延迟处理** | 遇到更高优先级才处理 | 遇到更高优先级才处理 |
+| **栈式思维** | 递归调用栈模拟 | 显式操作符栈 |
+
+#### **主要区别**
+| 方面 | 优先级爬升 | 逆波兰 |
+|------|------------|--------|
+| **实现方式** | 递归函数 | 显式栈 |
+| **内存使用** | 调用栈 | 操作符栈+操作数栈 |
+| **代码结构** | 单一函数 | 多个函数 |
+| **扩展性** | 易于添加新操作符 | 需要修改栈处理逻辑 |
+
+**结论**: 优先级爬升解析器本质上是一个**递归版本的逆波兰表达式处理算法**，两者都遵循"优先级驱动"的核心算法思想。
+
+### 6. AST树结构分析示例
+
+#### **复杂表达式**: `1+2*3**2**2`
+
+##### **AST树结构图**
+```
+                    BinaryOp(+)
+                   /           \
+            Number(1)          BinaryOp(*)
+                               /           \
+                        Number(2)          BinaryOp(**)
+                                           /           \
+                                    Number(3)          BinaryOp(**)
+                                                       /           \
+                                                Number(2)          Number(2)
+```
+
+##### **详细节点分析**
+1. **根节点 - 加法运算**: `1 + (2*3**2**2)`
+2. **右子树 - 乘法运算**: `2 * (3**2**2)`
+3. **右子树的右子树 - 第一个指数运算**: `3 ** (2**2)`
+4. **右子树的右子树的右子树 - 第二个指数运算**: `2 ** 2`
+
+##### **计算过程**
+```
+1. 计算 2**2 = 4
+2. 计算 3**4 = 81  
+3. 计算 2*81 = 162
+4. 计算 1+162 = 163
+```
+
+##### **优先级和结合性体现**
+- **优先级**: `**` > `*` > `+`
+- **右结合性**: `3**2**2` 解析为 `3**(2**2)`，不是 `(3**2)**2`
+- **树结构**: 由于右结合性，指数运算形成了右倾斜的树结构
+
+##### **完整JSON结构**
+```json
+{
+  "type": "BinaryOp",
+  "operator": "+",
+  "left": {"type": "Number", "value": 1},
+  "right": {
+    "type": "BinaryOp",
+    "operator": "*",
+    "left": {"type": "Number", "value": 2},
+    "right": {
+      "type": "BinaryOp",
+      "operator": "**",
+      "left": {"type": "Number", "value": 3},
+      "right": {
+        "type": "BinaryOp",
+        "operator": "**",
+        "left": {"type": "Number", "value": 2},
+        "right": {"type": "Number", "value": 2}
+      }
+    }
+  }
+}
+```
+
 ### AST 节点类型
 ```typescript
 interface NumberNode {

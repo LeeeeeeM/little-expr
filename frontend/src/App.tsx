@@ -7,7 +7,6 @@ import { parseExpressionWithStackSteps, type StackStep } from './parser/stackBas
 
 const App: React.FC = () => {
   const [expression, setExpression] = useState('1+2*3');
-  const [ast, setAST] = useState<ASTNode | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [totalSteps, setTotalSteps] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -19,8 +18,6 @@ const App: React.FC = () => {
   const [isStepByStepMode, setIsStepByStepMode] = useState(false);
   const [animationId, setAnimationId] = useState<number | null>(null);
   const [isCompiled, setIsCompiled] = useState(false);
-  const [currentPendingNodes, setCurrentPendingNodes] = useState<ASTNode[]>([]);
-  const [currentCanvasNodes, setCurrentCanvasNodes] = useState<ASTNode[]>([]);
 
   // 使用栈式解析器进行表达式验证
   const parseExpressionLocal = useCallback(async (expr: string): Promise<ASTNode | null> => {
@@ -36,7 +33,6 @@ const App: React.FC = () => {
 
   const handleExpressionChange = useCallback(async (newExpression: string) => {
     setExpression(newExpression);
-    setAST(null);
     setCurrentStep(0);
     setTotalSteps(0);
     setIsRunning(false);
@@ -45,14 +41,11 @@ const App: React.FC = () => {
     setStackSteps([]);
     setIsStepByStepMode(false);
     setIsCompiled(false);
-    setCurrentPendingNodes([]);
-    setCurrentCanvasNodes([]);
 
     if (newExpression.trim()) {
       try {
         setIsValid(true);
-        const result = await parseExpressionLocal(newExpression);
-        setAST(result);
+        await parseExpressionLocal(newExpression);
         setTotalSteps(1);
       } catch (error) {
         setIsValid(false);
@@ -76,15 +69,10 @@ const App: React.FC = () => {
       console.log('Final AST:', finalAST);
       setStackSteps(stackParseSteps);
       
-      // 设置最终AST
-      setAST(finalAST);
-      
       setTotalSteps(stackParseSteps.length);
       setCurrentStep(0);
       setIsCompiled(true);
       setIsStepByStepMode(false);
-      setCurrentPendingNodes([]);
-      setCurrentCanvasNodes([]);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '编译错误');
       setIsCompiled(false);
@@ -100,31 +88,15 @@ const App: React.FC = () => {
       // 第一次点击：进入按步执行模式，直接显示第一步
       setIsStepByStepMode(true);
       setCurrentStep(1);
-      
-      // 更新 AST 相关状态
-      if (steps.length > 0) {
-        const firstStep = steps[0];
-        setCurrentPendingNodes(firstStep.pendingNodes);
-        setCurrentCanvasNodes(firstStep.canvasNodes);
-      }
     } else {
       // 后续点击：执行下一步
       if (currentStep < totalSteps) {
         const nextStep = currentStep + 1;
         setCurrentStep(nextStep);
-        
-        // 更新 AST 相关状态
-        if (steps.length >= nextStep) {
-          const stepData = steps[nextStep - 1];
-          setCurrentPendingNodes(stepData.pendingNodes);
-          setCurrentCanvasNodes(stepData.canvasNodes);
-        }
       } else {
         // 所有步骤完成
         setIsStepByStepMode(false);
         setCurrentStep(0);
-        setCurrentPendingNodes([]);
-        setCurrentCanvasNodes([]);
       }
     }
   }, [isCompiled, isStepByStepMode, currentStep, totalSteps, steps]);
@@ -144,12 +116,6 @@ const App: React.FC = () => {
           const nextStep = currentIndex + 1;
           setCurrentStep(nextStep);
           
-          // 更新 AST 相关状态
-          if (steps.length >= nextStep) {
-            const stepData = steps[nextStep - 1];
-            setCurrentPendingNodes(stepData.pendingNodes);
-            setCurrentCanvasNodes(stepData.canvasNodes);
-          }
           
           currentIndex++;
           
@@ -159,8 +125,6 @@ const App: React.FC = () => {
           // 显示最终结果
           setIsExecuting(false);
           setAnimationId(null);
-          setCurrentPendingNodes([]);
-          setCurrentCanvasNodes([]);
         }
       };
       
@@ -170,7 +134,7 @@ const App: React.FC = () => {
       setIsExecuting(false);
       setAnimationId(null);
     }
-  }, [isCompiled, currentStep, totalSteps, stackSteps, steps]);
+  }, [isCompiled, currentStep, totalSteps, stackSteps]);
 
 
   const handleReset = useCallback(() => {
@@ -180,14 +144,11 @@ const App: React.FC = () => {
       setAnimationId(null);
     }
     
-    setAST(null);
     setCurrentStep(0);
     setIsRunning(false);
     setIsExecuting(false);
     setErrorMessage(undefined);
     setIsStepByStepMode(false);
-    setCurrentPendingNodes([]);
-    setCurrentCanvasNodes([]);
     // 注意：不重置 steps, totalSteps, isCompiled，保持编译状态
   }, [animationId]);
 
@@ -233,9 +194,6 @@ const App: React.FC = () => {
             currentStep={currentStep}
             isAnimating={isExecuting}
             currentStepDescription={stackSteps[currentStep - 1]?.description}
-            ast={ast}
-            pendingNodes={currentPendingNodes}
-            canvasNodes={currentCanvasNodes}
           />
         </div>
       </main>

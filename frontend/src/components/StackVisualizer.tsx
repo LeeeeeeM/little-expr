@@ -8,9 +8,6 @@ interface StackVisualizerProps {
   currentStep: number;
   isAnimating: boolean;
   currentStepDescription?: string;
-  ast?: ASTNode | null;
-  pendingNodes?: ASTNode[];
-  canvasNodes?: ASTNode[];
 }
 
 const StackTokenComponent: React.FC<{ 
@@ -124,11 +121,28 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
   currentStep,
   isAnimating,
   currentStepDescription,
-  ast,
-  pendingNodes = [],
-  canvasNodes = [],
 }) => {
   const currentStepData = steps[currentStep - 1];
+  
+  // 根据当前步骤生成AST树状结构
+  const generateASTFromStack = (stepData: StackStep | undefined): ASTNode | null => {
+    if (!stepData) return null;
+    
+    // 如果当前步骤有生成的AST节点，直接使用
+    if (stepData.generatedAST) {
+      return stepData.generatedAST;
+    }
+    
+    // 如果操作数栈中有AST节点，使用最后一个
+    const astNodes = stepData.operandStack.filter(item => typeof item === 'object' && item.type);
+    if (astNodes.length > 0) {
+      return astNodes[astNodes.length - 1] as ASTNode;
+    }
+    
+    return null;
+  };
+  
+  const currentAST = generateASTFromStack(currentStepData);
   
   // 调试日志
   console.log('StackVisualizer Debug:', {
@@ -136,7 +150,8 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
     currentStep,
     currentStepData,
     operatorStack: currentStepData?.operatorStack,
-    operandStack: currentStepData?.operandStack
+    operandStack: currentStepData?.operandStack,
+    currentAST
   });
   
   return (
@@ -191,14 +206,14 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
       {/* 画布区域 */}
       <div className="mt-4 flex-1 bg-white border-2 border-gray-300 rounded-lg p-4 min-h-0 overflow-hidden">
         {/* G6 树状图显示区域 */}
-        {ast ? (
+        {currentAST ? (
           <div className="h-full flex flex-col">
             <h3 className="text-sm font-semibold text-gray-700 mb-2 flex-shrink-0">AST 树状结构</h3>
             <div className="flex-1 min-h-0 border border-gray-200 rounded-lg">
               <ASTTreeVisualizer
-                ast={ast}
-                pendingNodes={pendingNodes}
-                canvasNodes={canvasNodes}
+                ast={currentAST}
+                pendingNodes={[]}
+                canvasNodes={[]}
                 isAnimating={isAnimating}
               />
             </div>
@@ -208,7 +223,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
             <div>
               <div className="text-2xl mb-2">🎨</div>
               <p className="text-sm">画布区域</p>
-              <p className="text-xs text-gray-400 mt-1">编译表达式后显示 AST 树状结构</p>
+              <p className="text-xs text-gray-400 mt-1">根据栈状态生成 AST 树状结构</p>
             </div>
           </div>
         )}

@@ -33,7 +33,8 @@ enum Precedence {
     NONE = 0,      // 无优先级（END token）
     ADD_SUB = 1,   // 加减运算
     MUL_DIV = 2,   // 乘除运算
-    POWER = 3      // 指数运算
+    POWER = 3,     // 指数运算
+    PAREN = 4      // 括号优先级（最高）
 }
 
 let src: string = "";
@@ -166,6 +167,8 @@ function getPrecedence(token: TokenType): Precedence {
             return Precedence.MUL_DIV;
         case TokenType.POWER:
             return Precedence.POWER;
+        case TokenType.LEFTPAREN:
+            return Precedence.PAREN;
         default:
             return Precedence.NONE;
     }

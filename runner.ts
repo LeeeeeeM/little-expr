@@ -68,20 +68,30 @@ function runParserSync(expression: string, parserType: string): string {
     let parserCommand = '';
     
     switch (parserType) {
-        case 'start':
-            parserCommand = 'bun run index.ts';
+        case 'bnf-integrated':
+            parserCommand = 'bun run bnf/index.ts';
             break;
-        case 'separated':
-            parserCommand = 'bun run parser-separated.ts';
+        case 'bnf-separated':
+            parserCommand = 'bun run bnf/separated.ts';
             break;
-        case 'precedence':
-            parserCommand = 'bun run precedence-climbing.ts';
+        case 'precedence-integrated':
+            parserCommand = 'bun run precedence-climbing/index.ts';
             break;
         case 'precedence-separated':
-            parserCommand = 'bun run parser-precedence-climbing-separated.ts';
+            parserCommand = 'bun run precedence-climbing/separated.ts';
+            break;
+        // 保持向后兼容
+        case 'start':
+            parserCommand = 'bun run bnf/index.ts';
+            break;
+        case 'separated':
+            parserCommand = 'bun run bnf/separated.ts';
+            break;
+        case 'precedence':
+            parserCommand = 'bun run precedence-climbing/index.ts';
             break;
         default:
-            parserCommand = 'bun run parser-separated.ts';
+            parserCommand = 'bun run bnf/separated.ts';
     }
     
     try {
@@ -129,8 +139,11 @@ function main(): void {
     
     if (args.length === 0) {
         console.log("使用方法: bun run runner.ts <测试文件路径> [解析器类型]");
-        console.log("示例: bun run runner.ts test/basic-expressions.txt separated");
-        console.log("解析器类型: start, separated, precedence, precedence-separated");
+        console.log("示例: bun run runner.ts test/basic-expressions.txt bnf-separated");
+        console.log("解析器类型:");
+        console.log("  BNF方法: bnf-integrated, bnf-separated");
+        console.log("  优先级爬升: precedence-integrated, precedence-separated");
+        console.log("  向后兼容: start, separated, precedence, precedence-separated");
         process.exit(1);
     }
     

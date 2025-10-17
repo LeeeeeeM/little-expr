@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import type { StackStep, StackToken, ASTNode as StackASTNode } from '../parser/stackBasedParser';
 import type { ASTNode } from '../parser/types';
 import { ASTTreeVisualizer } from './ASTTreeVisualizer';
@@ -62,6 +62,15 @@ const StackComponent: React.FC<{
   isOperatorStack?: boolean;
   isHighlighted?: boolean;
 }> = ({ title, items, isOperatorStack = false, isHighlighted = false }) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // 自动滚动到最新元素
+  useEffect(() => {
+    if (scrollContainerRef.current && items.length > 0) {
+      const container = scrollContainerRef.current;
+      container.scrollLeft = container.scrollWidth;
+    }
+  }, [items]);
   
   const renderOperandItem = (item: number | StackASTNode) => {
     if (typeof item === 'number') {
@@ -96,13 +105,16 @@ const StackComponent: React.FC<{
       <div className="text-sm font-semibold text-gray-800 bg-gray-100 py-2 px-3 rounded-t-lg">
         {title}
       </div>
-      {/* 栈内容行 */}
-      <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-b-lg min-h-[80px]">
+      {/* 栈内容行 - 可滚动 */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex items-center space-x-2 p-3 bg-gray-50 rounded-b-lg min-h-[80px] max-h-[120px] overflow-x-auto overflow-y-hidden scroll-smooth"
+      >
         {items.length === 0 ? (
           <div className="text-gray-400 text-sm">空栈</div>
         ) : (
           items.map((item, index) => (
-            <div key={index}>
+            <div key={index} className="flex-shrink-0">
               {isOperatorStack ? (
                 <StackTokenComponent token={item as StackToken} />
               ) : (

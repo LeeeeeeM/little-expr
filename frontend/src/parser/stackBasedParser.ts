@@ -283,6 +283,10 @@ export class StackBasedBrowserParser {
       this.finalAST = this.operandStack[0] as ASTNode;
     }
     const finalAST = this.getFinalAST();
+    
+    // 清空操作数栈，因为最终结果已经存储在finalAST中
+    this.operandStack = [];
+    
     this.addStep(`解析完成，最终AST: ${finalAST ? this.getASTDescription(finalAST) : '无'}`, undefined, undefined, undefined, finalAST || undefined);
     return this.steps;
   }
@@ -322,7 +326,7 @@ export class StackBasedBrowserParser {
     this.addStep(`操作符 ${this.getTokenTypeName(currentToken.type)} 入栈`);
   }
 
-  private executeTopOperator(): void {
+  private executeTopOperator(shouldPushBack: boolean = true): void {
     if (this.operatorStack.length === 0) {
       throw new Error("操作符栈为空");
     }
@@ -348,9 +352,15 @@ export class StackBasedBrowserParser {
     // 生成AST节点
     const astNode = this.createASTNode(operator, left, right);
     
-    // 将AST节点推回操作数栈
-    this.operandStack.push(astNode);
-    this.addStep(`生成AST节点并入栈: ${this.getASTDescription(astNode)}`, undefined, undefined, astNode);
+    if (shouldPushBack) {
+      // 将AST节点推回操作数栈
+      this.operandStack.push(astNode);
+      this.addStep(`生成AST节点并入栈: ${this.getASTDescription(astNode)}`, undefined, undefined, astNode);
+    } else {
+      // 不推回栈，直接存储为最终AST
+      this.finalAST = astNode;
+      this.addStep(`生成最终AST节点: ${this.getASTDescription(astNode)}`, undefined, undefined, astNode);
+    }
   }
 
   private createASTNode(operator: StackToken, left: number | ASTNode, right: number | ASTNode): ASTNode {
@@ -397,7 +407,9 @@ export class StackBasedBrowserParser {
 
   private processAllOperators(): void {
     while (this.operatorStack.length > 0) {
-      this.executeTopOperator();
+      // 如果这是最后一个操作符，不需要推回栈
+      const isLastOperator = this.operatorStack.length === 1;
+      this.executeTopOperator(!isLastOperator);
     }
   }
 

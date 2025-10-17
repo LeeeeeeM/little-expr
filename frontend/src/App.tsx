@@ -1,0 +1,245 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import { Header } from './components/Header';
+import { ExpressionEditor } from './components/ExpressionEditor';
+import { StackVisualizer } from './components/StackVisualizer';
+import { parseExpression, type ASTNode, type ParseStep } from './parser/browserParser';
+import { parseExpressionWithStackSteps, type StackStep } from './parser/stackBasedParser';
+
+const App: React.FC = () => {
+  const [expression, setExpression] = useState('1+2*3');
+  const [ast, setAST] = useState<ASTNode | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [totalSteps, setTotalSteps] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isValid, setIsValid] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [steps, setSteps] = useState<ParseStep[]>([]);
+  const [stackSteps, setStackSteps] = useState<StackStep[]>([]);
+  const [isStepByStepMode, setIsStepByStepMode] = useState(false);
+  const [animationId, setAnimationId] = useState<number | null>(null);
+  const [isCompiled, setIsCompiled] = useState(false);
+  const [currentPendingNodes, setCurrentPendingNodes] = useState<ASTNode[]>([]);
+  const [currentCanvasNodes, setCurrentCanvasNodes] = useState<ASTNode[]>([]);
+
+  // 浏览器端解析器
+  const parseExpressionLocal = useCallback(async (expr: string): Promise<ASTNode | null> => {
+    try {
+      // 模拟异步处理
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return parseExpression(expr);
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
+  const handleExpressionChange = useCallback(async (newExpression: string) => {
+    setExpression(newExpression);
+    setAST(null);
+    setCurrentStep(0);
+    setTotalSteps(0);
+    setIsRunning(false);
+    setErrorMessage(undefined);
+    setSteps([]);
+    setStackSteps([]);
+    setIsStepByStepMode(false);
+    setIsCompiled(false);
+    setCurrentPendingNodes([]);
+    setCurrentCanvasNodes([]);
+
+    if (newExpression.trim()) {
+      try {
+        setIsValid(true);
+        const result = await parseExpressionLocal(newExpression);
+        setAST(result);
+        setTotalSteps(1);
+      } catch (error) {
+        setIsValid(false);
+        setErrorMessage(error instanceof Error ? error.message : '解析错误');
+      }
+    }
+  }, [parseExpressionLocal]);
+
+  const handleCompile = useCallback(async () => {
+    if (!expression.trim()) return;
+    
+    setIsRunning(true);
+    setErrorMessage(undefined);
+    
+    try {
+      console.log('Compiling with stack parser for expression:', expression);
+      
+      // 使用栈式解析器获取栈步骤和解析器实例
+      const { steps: stackParseSteps, finalAST } = parseExpressionWithStackSteps(expression);
+      console.log('Stack parse steps:', stackParseSteps);
+      console.log('Final AST:', finalAST);
+      setStackSteps(stackParseSteps);
+      
+      // 设置最终AST
+      setAST(finalAST);
+      
+      setTotalSteps(stackParseSteps.length);
+      setCurrentStep(0);
+      setIsCompiled(true);
+      setIsStepByStepMode(false);
+      setCurrentPendingNodes([]);
+      setCurrentCanvasNodes([]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '编译错误');
+      setIsCompiled(false);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [expression, parseExpressionLocal]);
+
+  const handleStepByStep = useCallback(async () => {
+    if (!isCompiled) return;
+    
+    if (!isStepByStepMode) {
+      // 第一次点击：进入按步执行模式，直接显示第一步
+      setIsStepByStepMode(true);
+      setCurrentStep(1);
+      
+      // 更新 AST 相关状态
+      if (steps.length > 0) {
+        const firstStep = steps[0];
+        setCurrentPendingNodes(firstStep.pendingNodes);
+        setCurrentCanvasNodes(firstStep.canvasNodes);
+      }
+    } else {
+      // 后续点击：执行下一步
+      if (currentStep < totalSteps) {
+        const nextStep = currentStep + 1;
+        setCurrentStep(nextStep);
+        
+        // 更新 AST 相关状态
+        if (steps.length >= nextStep) {
+          const stepData = steps[nextStep - 1];
+          setCurrentPendingNodes(stepData.pendingNodes);
+          setCurrentCanvasNodes(stepData.canvasNodes);
+        }
+      } else {
+        // 所有步骤完成
+        setIsStepByStepMode(false);
+        setCurrentStep(0);
+        setCurrentPendingNodes([]);
+        setCurrentCanvasNodes([]);
+      }
+    }
+  }, [isCompiled, isStepByStepMode, currentStep, totalSteps, steps]);
+
+  const handleRunAll = useCallback(async () => {
+    if (!isCompiled) return;
+    
+    setIsExecuting(true);
+    setIsStepByStepMode(false);
+    
+    try {
+      // 如果已经完成所有步骤，重新开始
+      let currentIndex = currentStep >= totalSteps ? 0 : currentStep;
+      
+      const playNextStep = () => {
+        if (currentIndex < stackSteps.length) {
+          const nextStep = currentIndex + 1;
+          setCurrentStep(nextStep);
+          
+          // 更新 AST 相关状态
+          if (steps.length >= nextStep) {
+            const stepData = steps[nextStep - 1];
+            setCurrentPendingNodes(stepData.pendingNodes);
+            setCurrentCanvasNodes(stepData.canvasNodes);
+          }
+          
+          currentIndex++;
+          
+          const timeoutId = setTimeout(playNextStep, 1000);
+          setAnimationId(timeoutId);
+        } else {
+          // 显示最终结果
+          setIsExecuting(false);
+          setAnimationId(null);
+          setCurrentPendingNodes([]);
+          setCurrentCanvasNodes([]);
+        }
+      };
+      
+      playNextStep();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '执行错误');
+      setIsExecuting(false);
+      setAnimationId(null);
+    }
+  }, [isCompiled, currentStep, totalSteps, stackSteps, steps]);
+
+
+  const handleReset = useCallback(() => {
+    // 停止正在进行的动画
+    if (animationId) {
+      clearTimeout(animationId);
+      setAnimationId(null);
+    }
+    
+    setAST(null);
+    setCurrentStep(0);
+    setIsRunning(false);
+    setIsExecuting(false);
+    setErrorMessage(undefined);
+    setIsStepByStepMode(false);
+    setCurrentPendingNodes([]);
+    setCurrentCanvasNodes([]);
+    // 注意：不重置 steps, totalSteps, isCompiled，保持编译状态
+  }, [animationId]);
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (animationId) {
+        clearTimeout(animationId);
+      }
+    };
+  }, [animationId]);
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <Header
+        selectedExpression={expression}
+        onExpressionChange={handleExpressionChange}
+        onCompile={handleCompile}
+        onStepByStep={handleStepByStep}
+        onRunAll={handleRunAll}
+        onReset={handleReset}
+        isRunning={isRunning}
+        isExecuting={isExecuting}
+        isStepByStepMode={isStepByStepMode}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        isCompiled={isCompiled}
+      />
+      
+      <main className="flex h-[calc(100vh-80px)]">
+        <div className="w-1/3 p-6">
+          <ExpressionEditor
+            expression={expression}
+            onExpressionChange={handleExpressionChange}
+            isValid={isValid}
+            errorMessage={errorMessage}
+          />
+        </div>
+        
+        <div className="w-2/3 p-6">
+          <StackVisualizer
+            steps={stackSteps}
+            currentStep={currentStep}
+            isAnimating={isExecuting}
+            currentStepDescription={stackSteps[currentStep - 1]?.description}
+            ast={ast}
+            pendingNodes={currentPendingNodes}
+            canvasNodes={currentCanvasNodes}
+          />
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default App;

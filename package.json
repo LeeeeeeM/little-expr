@@ -20,7 +20,9 @@
     "test:bnf-separated": "bun run runner.ts test/basic-expressions.txt bnf-separated",
     "test:precedence-integrated": "bun run runner.ts test/basic-expressions.txt precedence-integrated",
     "test:precedence-separated": "bun run runner.ts test/basic-expressions.txt precedence-separated",
-    "test:all": "bun run test:basic && bun run test:edge && bun run test:precedence && bun run test:performance && bun run test:bnf-integrated && bun run test:precedence-integrated && bun run test:precedence-separated"
+    "test:all": "bun run test:basic && bun run test:edge && bun run test:precedence && bun run test:performance && bun run test:bnf-integrated && bun run test:precedence-integrated && bun run test:precedence-separated",
+    "frontend": "cd frontend && bun run dev",
+    "dev": "bun run frontend"
   },
   "devDependencies": {
     "@types/bun": "latest",

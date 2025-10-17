@@ -1,8 +1,25 @@
-/* 栈式优先级爬坡实现
- * 验证用户对优先级爬坡算法的理解
- * 使用操作符栈（单调递增）和操作数栈
+/* 栈式优先级爬坡实现 - 基于 separated.ts
+ * 使用操作符栈和操作数栈实现可视化解析过程
  */
 
+// --- AST节点类型定义 ---
+interface ASTNode {
+    type: string;
+}
+
+interface NumberNode extends ASTNode {
+    type: 'Number';
+    value: number;
+}
+
+interface BinaryOpNode extends ASTNode {
+    type: 'BinaryOp';
+    operator: string;
+    left: ASTNode;
+    right: ASTNode;
+}
+
+// --- 词法分析器 ---
 enum TokenType {
     NUMBER,
     ADD, SUB, MUL, DIV, POWER,
@@ -10,12 +27,13 @@ enum TokenType {
     END
 }
 
+// --- 优先级枚举 ---
 enum Precedence {
-    NONE = 0,
-    ADD_SUB = 1,
-    MUL_DIV = 2,
-    POWER = 3,
-    PAREN = 4
+    NONE = 0,      // 无优先级（END token）
+    ADD_SUB = 1,   // 加减运算
+    MUL_DIV = 2,   // 乘除运算
+    POWER = 3,     // 指数运算
+    PAREN = 4      // 括号优先级（最高）
 }
 
 interface Token {
@@ -149,6 +167,7 @@ class StackBasedParser {
             t.type === TokenType.NUMBER ? t.value : TokenType[t.type]
         ));
 
+        // 使用操作符栈和操作数栈进行解析
         while (this.currentIndex < this.tokens.length) {
             const token = this.tokens[this.currentIndex];
             
@@ -157,30 +176,36 @@ class StackBasedParser {
             }
             
             if (token.type === TokenType.NUMBER) {
-                // 操作数入栈
-                if (token.value === undefined) {
-                    throw new Error("Number token missing value");
-                }
-                this.operandStack.push(token.value);
+                this.operandStack.push(token.value!);
                 console.log(`操作数 ${token.value} 入栈`);
                 console.log(`操作数栈: [${this.operandStack.join(', ')}]`);
                 this.currentIndex++;
                 
+            } else if (token.type === TokenType.SUB && this.isUnaryMinus()) {
+                // 处理一元负号
+                this.currentIndex++;
+                const nextToken = this.tokens[this.currentIndex];
+                if (!nextToken || nextToken.type !== TokenType.NUMBER) {
+                    throw new Error("一元负号后必须是数字");
+                }
+                const negValue = -nextToken.value!;
+                this.operandStack.push(negValue);
+                console.log(`一元负号: -${nextToken.value} = ${negValue} 入栈`);
+                console.log(`操作数栈: [${this.operandStack.join(', ')}]`);
+                this.currentIndex++;
+                
             } else if (token.type === TokenType.LEFTPAREN) {
-                // 左括号入操作符栈
                 this.operatorStack.push(token);
                 console.log(`左括号入操作符栈`);
                 console.log(`操作符栈: [${this.operatorStack.map(t => TokenType[t.type]).join(', ')}]`);
                 this.currentIndex++;
                 
             } else if (token.type === TokenType.RIGHTPAREN) {
-                // 处理右括号：弹出操作符直到遇到左括号
                 console.log(`遇到右括号，开始弹出操作符...`);
                 this.processOperatorsUntilLeftParen();
                 this.currentIndex++;
                 
             } else if (token.type === TokenType.END) {
-                // 处理结束：弹出所有操作符
                 console.log(`表达式结束，处理剩余操作符...`);
                 this.processAllOperators();
                 break;
@@ -203,10 +228,10 @@ class StackBasedParser {
         return result;
     }
 
+    // 栈式解析方法
     private processOperator(currentToken: Token): void {
         console.log(`\n处理操作符: ${TokenType[currentToken.type]}`);
         
-        // 用户理解的关键点1：新操作符如果遇到小于栈顶，则出栈
         while (this.operatorStack.length > 0) {
             const topOperator = this.operatorStack[this.operatorStack.length - 1];
             
@@ -218,7 +243,7 @@ class StackBasedParser {
                 break; // 遇到左括号停止
             }
             
-            // 用户理解的关键点2：左结合操作符优先级+1
+            // 左结合操作符优先级+1
             const topPrecedence = topOperator.precedence + (topOperator.isRightAssociative ? 0 : 1);
             const currentPrecedence = currentToken.precedence;
             
@@ -232,7 +257,7 @@ class StackBasedParser {
             }
         }
         
-        // 用户理解的关键点3：新操作符入栈
+        // 新操作符入栈
         this.operatorStack.push(currentToken);
         console.log(`操作符 ${TokenType[currentToken.type]} 入栈`);
         console.log(`操作符栈: [${this.operatorStack.map(t => TokenType[t.type]).join(', ')}]`);
@@ -299,11 +324,25 @@ class StackBasedParser {
             this.executeTopOperator();
         }
     }
+
+    private isUnaryMinus(): boolean {
+        // 检查是否是一元负号：
+        // 1. 操作数栈为空（表达式开头）
+        // 2. 或者栈顶是左括号（括号内开头）
+        return this.operandStack.length === 0 || 
+               (this.operatorStack.length > 0 && 
+                this.operatorStack[this.operatorStack.length - 1]?.type === TokenType.LEFTPAREN);
+    }
+
+
+
 }
 
 // 测试函数
 function testStackBasedParser() {
     const testCases = [
+        "1 + 2 * 4 * 3 ** 2 ** 2 + 100",
+        "1 + (-1)",
         "2 + 3 * 4",
         "2 * 3 + 4",
         "2 ** 3 ** 2",
@@ -311,7 +350,8 @@ function testStackBasedParser() {
         "2 + 3 * 4 - 5",
         "2 ** 3 + 4 * 5 - 6",
         "2 + 3 ** 4 ** 2 - 5 * 6",
-        "2 ** 3 ** 2 + 4 * 5 - 6 / 2"
+        "2 ** 3 ** 2 + 4 * 5 - 6 / 2",
+        "-1 + 2 * 3"
     ];
 
     testCases.forEach(expression => {

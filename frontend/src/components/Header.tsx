@@ -18,6 +18,7 @@ interface HeaderProps {
 const PRESET_EXPRESSIONS = [
   { label: '基本运算', value: '1+2*3' },
   { label: '复杂运算', value: '1+2*3**2**2+100' },
+  { label: '超复杂运算', value: '1 + 2 * 4 * 3 ** 2 ** 2 + 100' },
   { label: '括号运算', value: '(1+2)*3' },
   { label: '嵌套括号', value: '((1+2)*3)**2' },
   { label: '除法运算', value: '10/2+3*4' },

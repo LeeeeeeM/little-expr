@@ -233,6 +233,25 @@ export class StackBasedBrowserParser {
         this.addStep(`操作数 ${token.value} 入栈`);
         this.currentIndex++;
         
+      } else if (token.type === TokenType.SUB && this.isUnaryMinus()) {
+        // 处理一元负号：表达式开头或括号内的负号
+        this.currentIndex++;
+        
+        const nextToken = this.tokens[this.currentIndex];
+        if (!nextToken || nextToken.type !== TokenType.NUMBER) {
+          throw new Error("一元负号后必须是数字");
+        }
+        
+        if (nextToken.value === undefined) {
+          throw new Error("Number token missing value");
+        }
+        
+        // 将负数入栈
+        const negValue = -nextToken.value;
+        this.operandStack.push(negValue);
+        this.addStep(`一元负号: -${nextToken.value} = ${negValue} 入栈`);
+        this.currentIndex++; // 跳过数字token
+        
       } else if (token.type === TokenType.LEFTPAREN) {
         // 左括号入操作符栈
         this.operatorStack.push(token);
@@ -259,6 +278,10 @@ export class StackBasedBrowserParser {
     }
 
     // 解析完成，记录最终栈状态
+    // 设置最终AST为操作数栈中的唯一元素
+    if (this.operandStack.length === 1) {
+      this.finalAST = this.operandStack[0] as ASTNode;
+    }
     const finalAST = this.getFinalAST();
     this.addStep(`解析完成，最终AST: ${finalAST ? this.getASTDescription(finalAST) : '无'}`, undefined, undefined, undefined, finalAST || undefined);
     return this.steps;
@@ -280,22 +303,17 @@ export class StackBasedBrowserParser {
       }
       
       // 用户理解的关键点2：优先级比较
-      const topPrecedence = topOperator.precedence;
+      // 左结合操作符优先级+1
+      const topPrecedence = topOperator.precedence + (topOperator.isRightAssociative ? 0 : 1);
       const currentPrecedence = currentToken.precedence;
       
-      // 对于左结合操作符，栈顶优先级需要+1来确保左结合
-      const adjustedTopPrecedence = topOperator.isRightAssociative ? topPrecedence : topPrecedence + 1;
+      this.addStep(`比较: 栈顶操作符 ${this.getTokenTypeName(topOperator.type)} 优先级=${topPrecedence}, 当前操作符 ${this.getTokenTypeName(currentToken.type)} 优先级=${currentPrecedence}`);
       
-      this.addStep(`比较: 栈顶操作符 ${this.getTokenTypeName(topOperator.type)} 优先级=${adjustedTopPrecedence}, 当前操作符 ${this.getTokenTypeName(currentToken.type)} 优先级=${currentPrecedence}`);
-      
-      if (adjustedTopPrecedence > currentPrecedence) {
+      if (topPrecedence > currentPrecedence) {
         // 栈顶操作符优先级更高，需要先处理
         this.executeTopOperator();
-      } else if (adjustedTopPrecedence === currentPrecedence && !currentToken.isRightAssociative) {
-        // 优先级相等且当前操作符是左结合，需要先处理栈顶
-        this.executeTopOperator();
       } else {
-        break; // 当前操作符优先级更高，或者优先级相等且当前操作符是右结合
+        break; // 当前操作符优先级更高或相等，可以入栈
       }
     }
     
@@ -330,15 +348,9 @@ export class StackBasedBrowserParser {
     // 生成AST节点
     const astNode = this.createASTNode(operator, left, right);
     
-    // 如果操作符栈为空，说明这是最后一个操作，不需要再入栈
-    if (this.operatorStack.length === 0) {
-      this.finalAST = astNode; // 存储最终AST
-      this.addStep(`生成最终AST节点: ${this.getASTDescription(astNode)}`, undefined, undefined, astNode);
-    } else {
-      // 将AST节点推回操作数栈
-      this.operandStack.push(astNode);
-      this.addStep(`生成AST节点并入栈: ${this.getASTDescription(astNode)}`, undefined, undefined, astNode);
-    }
+    // 将AST节点推回操作数栈
+    this.operandStack.push(astNode);
+    this.addStep(`生成AST节点并入栈: ${this.getASTDescription(astNode)}`, undefined, undefined, astNode);
   }
 
   private createASTNode(operator: StackToken, left: number | ASTNode, right: number | ASTNode): ASTNode {
@@ -407,6 +419,15 @@ export class StackBasedBrowserParser {
   // 获取最终生成的AST
   public getFinalAST(): ASTNode | null {
     return this.finalAST;
+  }
+
+  private isUnaryMinus(): boolean {
+    // 检查是否是一元负号：
+    // 1. 操作数栈为空（表达式开头）
+    // 2. 或者栈顶是左括号（括号内开头）
+    return this.operandStack.length === 0 || 
+           (this.operatorStack.length > 0 && 
+            this.operatorStack[this.operatorStack.length - 1]?.type === TokenType.LEFTPAREN);
   }
 
   private getOperatorSymbol(tokenType: TokenType): string {

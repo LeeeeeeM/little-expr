@@ -1,6 +1,6 @@
 import React from 'react';
 import type { StackStep, StackToken, ASTNode as StackASTNode } from '../parser/stackBasedParser';
-import type { ASTNode } from '../parser/browserParser';
+import type { ASTNode } from '../parser/types';
 import { ASTTreeVisualizer } from './ASTTreeVisualizer';
 
 interface StackVisualizerProps {

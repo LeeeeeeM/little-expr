@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { TreeGraph } from '@antv/g6';
-import type { ASTNode } from '../parser/browserParser';
+import type { ASTNode } from '../parser/types';
 
 interface ASTTreeVisualizerProps {
   ast: ASTNode | null;

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ExpressionEditor } from './components/ExpressionEditor';
 import { StackVisualizer } from './components/StackVisualizer';
-import { parseExpression, type ASTNode, type ParseStep } from './parser/browserParser';
+import { type ASTNode, type ParseStep } from './parser/types';
 import { parseExpressionWithStackSteps, type StackStep } from './parser/stackBasedParser';
 
 const App: React.FC = () => {
@@ -22,12 +22,13 @@ const App: React.FC = () => {
   const [currentPendingNodes, setCurrentPendingNodes] = useState<ASTNode[]>([]);
   const [currentCanvasNodes, setCurrentCanvasNodes] = useState<ASTNode[]>([]);
 
-  // 浏览器端解析器
+  // 使用栈式解析器进行表达式验证
   const parseExpressionLocal = useCallback(async (expr: string): Promise<ASTNode | null> => {
     try {
       // 模拟异步处理
       await new Promise(resolve => setTimeout(resolve, 100));
-      return parseExpression(expr);
+      const { finalAST } = parseExpressionWithStackSteps(expr);
+      return finalAST;
     } catch (error) {
       throw error;
     }

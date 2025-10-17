@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ASTNode } from '../parser/browserParser';
+import type { ASTNode } from '../parser/types';
 
 interface ASTVisualizerProps {
   ast: ASTNode | null;

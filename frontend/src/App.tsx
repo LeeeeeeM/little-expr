@@ -61,12 +61,9 @@ const App: React.FC = () => {
     setErrorMessage(undefined);
     
     try {
-      console.log('Compiling with stack parser for expression:', expression);
       
       // 使用栈式解析器获取栈步骤和解析器实例
-      const { steps: stackParseSteps, finalAST } = parseExpressionWithStackSteps(expression);
-      console.log('Stack parse steps:', stackParseSteps);
-      console.log('Final AST:', finalAST);
+      const { steps: stackParseSteps } = parseExpressionWithStackSteps(expression);
       setStackSteps(stackParseSteps);
       
       setTotalSteps(stackParseSteps.length);

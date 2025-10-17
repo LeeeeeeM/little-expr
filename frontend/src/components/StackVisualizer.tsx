@@ -128,6 +128,11 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
   const generateASTFromStack = (stepData: StackStep | undefined): ASTNode | null => {
     if (!stepData) return null;
     
+    // 优先使用最终AST（解析完成时）
+    if (stepData.finalAST) {
+      return stepData.finalAST;
+    }
+    
     // 如果当前步骤有生成的AST节点，直接使用
     if (stepData.generatedAST) {
       return stepData.generatedAST;
@@ -143,16 +148,6 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
   };
   
   const currentAST = generateASTFromStack(currentStepData);
-  
-  // 调试日志
-  console.log('StackVisualizer Debug:', {
-    stepsLength: steps.length,
-    currentStep,
-    currentStepData,
-    operatorStack: currentStepData?.operatorStack,
-    operandStack: currentStepData?.operandStack,
-    currentAST
-  });
   
   return (
     <div className="h-full flex flex-col">

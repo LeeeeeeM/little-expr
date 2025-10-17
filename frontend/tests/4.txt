@@ -1,0 +1,79 @@
+表达式: -1+2*3
+
+注意: 当前解析器将开头的 - 作为二元减号处理，需要两个操作数
+
+初始状态:
+operatorStack = []
+operandStack = []
+astnode = null
+
+第1步: 解析到操作符 -
+- 当前解析器将其作为二元减号处理（优先级1）
+- 但操作数栈为空，这会导致解析错误
+- 实际实现中需要特殊处理一元负号
+
+预期行为（如果正确实现一元负号）:
+operatorStack = [-]
+operandStack = []
+astnode = null
+
+第2步: 解析到数字 1
+- 数字直接入操作数栈
+operatorStack = [-]
+operandStack = [1]
+astnode = null
+
+第3步: 解析到操作符 +
+- + 优先级等于栈顶 -（都是优先级1），先处理栈顶操作符
+- 弹出操作符 -，弹出操作数 1
+- 生成AST节点: { op: -, left: null, right: 1 } (一元操作)
+- AST节点入操作数栈
+operatorStack = []
+operandStack = [AST(-1)]
+astnode = AST(-1)
+
+第4步: + 入栈
+- 操作符栈为空，+ 直接入栈
+operatorStack = [+]
+operandStack = [AST(-1)]
+astnode = AST(-1)
+
+第5步: 解析到数字 2
+- 数字直接入操作数栈
+operatorStack = [+]
+operandStack = [AST(-1), 2]
+astnode = AST(-1)
+
+第6步: 解析到操作符 *
+- * 优先级高于 +，直接入栈
+operatorStack = [+, *]
+operandStack = [AST(-1), 2]
+astnode = AST(-1)
+
+第7步: 解析到数字 3
+- 数字直接入操作数栈
+operatorStack = [+, *]
+operandStack = [AST(-1), 2, 3]
+astnode = AST(-1)
+
+第8步: 解析到结束标记，处理剩余操作符
+- 弹出操作符 *，弹出操作数 3(right), 2(left)
+- 生成AST节点: { op: *, left: 2, right: 3 }
+- AST节点入操作数栈
+operatorStack = [+]
+operandStack = [AST(-1), AST(2*3)]
+astnode = AST(2*3)
+
+第9步: 处理剩余操作符 +
+- 弹出操作符 +，弹出操作数 AST(2*3)(right), AST(-1)(left)
+- 生成最终AST节点: { op: +, left: AST(-1), right: AST(2*3) }
+operatorStack = []
+operandStack = []
+astnode = AST(AST(-1)+AST(2*3))
+
+最终结果: AST((-1)+(2*3))
+
+当前解析器限制:
+- 无法正确处理一元负号
+- 需要扩展TokenType和解析逻辑来支持一元操作符
+- 建议使用括号: (-1)+2*3 或 0-1+2*3

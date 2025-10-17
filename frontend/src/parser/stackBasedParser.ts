@@ -28,6 +28,8 @@ export interface StackStep {
   poppedOperands?: { left: number | ASTNode; right: number | ASTNode };
   // 记录生成的AST节点
   generatedAST?: ASTNode;
+  // 记录最终AST（仅在最后一步）
+  finalAST?: ASTNode;
 }
 
 export enum TokenType {
@@ -63,7 +65,7 @@ export class StackBasedBrowserParser {
     this.tokenize(expression.trim());
   }
 
-  private addStep(description: string, poppedOperator?: StackToken, poppedOperands?: { left: number | ASTNode; right: number | ASTNode }, generatedAST?: ASTNode): void {
+  private addStep(description: string, poppedOperator?: StackToken, poppedOperands?: { left: number | ASTNode; right: number | ASTNode }, generatedAST?: ASTNode, finalAST?: ASTNode): void {
     this.stepCounter++;
     this.steps.push({
       step: this.stepCounter,
@@ -74,7 +76,8 @@ export class StackBasedBrowserParser {
       position: this.currentIndex,
       poppedOperator,
       poppedOperands,
-      generatedAST
+      generatedAST,
+      finalAST
     });
   }
 
@@ -257,7 +260,7 @@ export class StackBasedBrowserParser {
 
     // 解析完成，记录最终栈状态
     const finalAST = this.getFinalAST();
-    this.addStep(`解析完成，最终AST: ${finalAST ? this.getASTDescription(finalAST) : '无'}`);
+    this.addStep(`解析完成，最终AST: ${finalAST ? this.getASTDescription(finalAST) : '无'}`, undefined, undefined, undefined, finalAST || undefined);
     return this.steps;
   }
 
@@ -276,17 +279,23 @@ export class StackBasedBrowserParser {
         break; // 遇到左括号停止
       }
       
-      // 用户理解的关键点2：左结合操作符优先级+1
-      const topPrecedence = topOperator.precedence + (topOperator.isRightAssociative ? 0 : 1);
+      // 用户理解的关键点2：优先级比较
+      const topPrecedence = topOperator.precedence;
       const currentPrecedence = currentToken.precedence;
       
-      this.addStep(`比较: 栈顶操作符 ${this.getTokenTypeName(topOperator.type)} 优先级=${topPrecedence}, 当前操作符 ${this.getTokenTypeName(currentToken.type)} 优先级=${currentPrecedence}`);
+      // 对于左结合操作符，栈顶优先级需要+1来确保左结合
+      const adjustedTopPrecedence = topOperator.isRightAssociative ? topPrecedence : topPrecedence + 1;
       
-      if (topPrecedence > currentPrecedence) {
+      this.addStep(`比较: 栈顶操作符 ${this.getTokenTypeName(topOperator.type)} 优先级=${adjustedTopPrecedence}, 当前操作符 ${this.getTokenTypeName(currentToken.type)} 优先级=${currentPrecedence}`);
+      
+      if (adjustedTopPrecedence > currentPrecedence) {
         // 栈顶操作符优先级更高，需要先处理
         this.executeTopOperator();
+      } else if (adjustedTopPrecedence === currentPrecedence && !currentToken.isRightAssociative) {
+        // 优先级相等且当前操作符是左结合，需要先处理栈顶
+        this.executeTopOperator();
       } else {
-        break; // 当前操作符优先级更高或相等，可以入栈
+        break; // 当前操作符优先级更高，或者优先级相等且当前操作符是右结合
       }
     }
     

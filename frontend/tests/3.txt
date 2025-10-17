@@ -1,0 +1,136 @@
+表达式: 1+2*4*3**2**2+100
+
+初始状态:
+operatorStack = []
+operandStack = []
+astnode = null
+
+第1步: 解析到数字 1
+- 数字直接入操作数栈
+operatorStack = []
+operandStack = [1]
+astnode = null
+
+第2步: 解析到操作符 +
+- + 优先级高于空栈（0），直接入栈
+operatorStack = [+]
+operandStack = [1]
+astnode = null
+
+第3步: 解析到数字 2
+- 数字直接入操作数栈
+operatorStack = [+]
+operandStack = [1, 2]
+astnode = null
+
+第4步: 解析到操作符 *
+- * 优先级高于 +，直接入栈
+operatorStack = [+, *]
+operandStack = [1, 2]
+astnode = null
+
+第5步: 解析到数字 4
+- 数字直接入操作数栈
+operatorStack = [+, *]
+operandStack = [1, 2, 4]
+astnode = null
+
+第6步: 解析到操作符 *
+- * 优先级等于栈顶 *（都是左结合），先处理栈顶操作符
+- 弹出操作符 *，弹出操作数 4(right), 2(left)
+- 生成AST节点: { op: *, left: 2, right: 4 }
+- AST节点入操作数栈
+operatorStack = [+]
+operandStack = [1, AST(2*4)]
+astnode = AST(2*4)
+
+第7步: * 入栈
+- 操作符栈为空，* 直接入栈
+operatorStack = [+, *]
+operandStack = [1, AST(2*4)]
+astnode = AST(2*4)
+
+第8步: 解析到数字 3
+- 数字直接入操作数栈
+operatorStack = [+, *]
+operandStack = [1, AST(2*4), 3]
+astnode = AST(2*4)
+
+第9步: 解析到操作符 **
+- ** 优先级高于 *，直接入栈
+operatorStack = [+, *, **]
+operandStack = [1, AST(2*4), 3]
+astnode = AST(2*4)
+
+第10步: 解析到数字 2
+- 数字直接入操作数栈
+operatorStack = [+, *, **]
+operandStack = [1, AST(2*4), 3, 2]
+astnode = AST(2*4)
+
+第11步: 解析到操作符 **
+- ** 优先级等于栈顶 **（都是右结合），直接入栈
+operatorStack = [+, *, **, **]
+operandStack = [1, AST(2*4), 3, 2]
+astnode = AST(2*4)
+
+第12步: 解析到数字 2
+- 数字直接入操作数栈
+operatorStack = [+, *, **, **]
+operandStack = [1, AST(2*4), 3, 2, 2]
+astnode = AST(2*4)
+
+第13步: 解析到操作符 +
+- + 优先级低于栈顶 **，先处理栈顶操作符
+- 弹出操作符 **，弹出操作数 2(right), 2(left)
+- 生成AST节点: { op: **, left: 2, right: 2 }
+- AST节点入操作数栈
+operatorStack = [+, *, **]
+operandStack = [1, AST(2*4), 3, AST(2**2)]
+astnode = AST(2**2)
+
+第14步: 继续处理 +
+- + 优先级低于栈顶 **，先处理栈顶操作符
+- 弹出操作符 **，弹出操作数 AST(2**2)(right), 3(left)
+- 生成AST节点: { op: **, left: 3, right: AST(2**2) }
+- AST节点入操作数栈
+operatorStack = [+, *]
+operandStack = [1, AST(2*4), AST(3**(2**2))]
+astnode = AST(3**(2**2))
+
+第15步: 继续处理 +
+- + 优先级低于栈顶 *，先处理栈顶操作符
+- 弹出操作符 *，弹出操作数 AST(3**(2**2))(right), AST(2*4)(left)
+- 生成AST节点: { op: *, left: AST(2*4), right: AST(3**(2**2)) }
+- AST节点入操作数栈
+operatorStack = [+]
+operandStack = [1, AST((2*4)*(3**(2**2)))]
+astnode = AST((2*4)*(3**(2**2)))
+
+第16步: 继续处理 +
+- + 优先级等于栈顶 +（都是左结合），先处理栈顶操作符
+- 弹出操作符 +，弹出操作数 AST((2*4)*(3**(2**2)))(right), 1(left)
+- 生成AST节点: { op: +, left: 1, right: AST((2*4)*(3**(2**2))) }
+- AST节点入操作数栈
+operatorStack = []
+operandStack = [AST(1+((2*4)*(3**(2**2))))]
+astnode = AST(1+((2*4)*(3**(2**2))))
+
+第17步: + 入栈
+- 操作符栈为空，+ 直接入栈
+operatorStack = [+]
+operandStack = [AST(1+((2*4)*(3**(2**2))))]
+astnode = AST(1+((2*4)*(3**(2**2))))
+
+第18步: 解析到数字 100
+- 数字直接入操作数栈
+operatorStack = [+]
+operandStack = [AST(1+((2*4)*(3**(2**2)))), 100]
+astnode = AST(1+((2*4)*(3**(2**2))))
+
+第19步: 解析到结束标记，处理剩余操作符
+- 弹出操作符 +，弹出操作数 100(right), AST(1+((2*4)*(3**(2**2))))(left)
+- 生成最终AST节点: { op: +, left: AST(1+((2*4)*(3**(2**2)))), right: 100 }
+operatorStack = []
+operandStack = []
+astnode = AST((1+((2*4)*(3**(2**2))))+100)

@@ -5,8 +5,6 @@ bun.lockb
 # Build outputs
 dist/
 build/
-*.js
-*.js.map
 
 # IDE
 .vscode/settings.json

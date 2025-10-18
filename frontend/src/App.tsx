@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ExpressionEditor } from './components/ExpressionEditor';
 import { StackVisualizer } from './components/StackVisualizer';
+import { AssemblyGenerator } from './components/AssemblyGenerator';
 import { type ParseStep } from './parser/types';
 import { parseExpressionWithStackSteps, type StackStep } from './parser/stackBasedParser';
 
@@ -176,7 +177,7 @@ const App: React.FC = () => {
       />
       
       <main className="flex h-[calc(100vh-80px)]">
-        <div className="w-1/3 p-6">
+        <div className="w-1/5 p-6">
           <ExpressionEditor
             expression={expression}
             onExpressionChange={handleExpressionChange}
@@ -186,12 +187,19 @@ const App: React.FC = () => {
           />
         </div>
         
-        <div className="w-2/3 p-6">
+        <div className="w-3/5 p-6">
           <StackVisualizer
             steps={stackSteps}
             currentStep={currentStep}
             isAnimating={isExecuting}
             currentStepDescription={stackSteps[currentStep - 1]?.description}
+          />
+        </div>
+        
+        <div className="w-1/5 p-6">
+          <AssemblyGenerator
+            steps={stackSteps}
+            currentStep={currentStep}
           />
         </div>
       </main>

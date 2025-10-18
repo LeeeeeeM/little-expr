@@ -2,6 +2,16 @@ import React, { useEffect, useRef } from 'react';
 import { TreeGraph } from '@antv/g6';
 import type { ASTNode } from '../parser/types';
 
+// 简单的AST比较
+const isSameAST = (a: ASTNode | null | undefined, b: ASTNode | null | undefined): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.type !== b.type) return false;
+  if (a.value !== b.value) return false;
+  if (a.operator !== b.operator) return false;
+  return isSameAST(a.left, b.left) && isSameAST(a.right, b.right);
+};
+
 interface ASTTreeVisualizerProps {
   ast: ASTNode | null;
   pendingNodes?: ASTNode[];
@@ -60,9 +70,17 @@ export const ASTTreeVisualizer: React.FC<ASTTreeVisualizerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<TreeGraph | null>(null);
+  const lastASTRef = useRef<ASTNode | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // 如果AST相同，不重新渲染
+    if (isSameAST(ast, lastASTRef.current)) {
+      return;
+    }
+    
+    lastASTRef.current = ast;
 
     // 销毁之前的图实例
     if (graphRef.current) {
@@ -125,12 +143,12 @@ export const ASTTreeVisualizer: React.FC<ASTTreeVisualizerProps> = ({
     graph.fitView();
 
     // 清理函数
-    return () => {
-      if (graphRef.current) {
-        graphRef.current.destroy();
-        graphRef.current = null;
-      }
-    };
+    // return () => {
+    //   if (graphRef.current) {
+    //     graphRef.current.destroy();
+    //     graphRef.current = null;
+    //   }
+    // };
   }, [ast]);
 
   // 当容器大小变化时重新渲染

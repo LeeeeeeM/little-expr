@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ExpressionEditor } from './components/ExpressionEditor';
 import { StackVisualizer } from './components/StackVisualizer';
-import { type ASTNode, type ParseStep } from './parser/types';
+import { type ParseStep } from './parser/types';
 import { parseExpressionWithStackSteps, type StackStep } from './parser/stackBasedParser';
 
 const App: React.FC = () => {
@@ -18,18 +18,6 @@ const App: React.FC = () => {
   const [isStepByStepMode, setIsStepByStepMode] = useState(false);
   const [animationId, setAnimationId] = useState<number | null>(null);
   const [isCompiled, setIsCompiled] = useState(false);
-
-  // 使用栈式解析器进行表达式验证
-  const parseExpressionLocal = useCallback(async (expr: string): Promise<ASTNode | null> => {
-    try {
-      // 模拟异步处理
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const { finalAST } = parseExpressionWithStackSteps(expr);
-      return finalAST;
-    } catch (error) {
-      throw error;
-    }
-  }, []);
 
   const handleExpressionChange = useCallback(async (newExpression: string) => {
     // 停止正在进行的动画
@@ -49,17 +37,10 @@ const App: React.FC = () => {
     setIsStepByStepMode(false);
     setIsCompiled(false);
 
-    if (newExpression.trim()) {
-      try {
-        setIsValid(true);
-        await parseExpressionLocal(newExpression);
-        setTotalSteps(1);
-      } catch (error) {
-        setIsValid(false);
-        setErrorMessage(error instanceof Error ? error.message : '解析错误');
-      }
-    }
-  }, [parseExpressionLocal, animationId]);
+    // 重置验证状态，不进行自动编译
+    setIsValid(true);
+    setErrorMessage(undefined);
+  }, [animationId]);
 
   const handleCompile = useCallback(async () => {
     if (!expression.trim()) return;
@@ -83,7 +64,7 @@ const App: React.FC = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [expression, parseExpressionLocal]);
+  }, [expression]);
 
   const handleStepByStep = useCallback(async () => {
     if (!isCompiled) return;

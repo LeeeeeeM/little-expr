@@ -32,10 +32,17 @@ const App: React.FC = () => {
   }, []);
 
   const handleExpressionChange = useCallback(async (newExpression: string) => {
+    // 停止正在进行的动画
+    if (animationId) {
+      clearTimeout(animationId);
+      setAnimationId(null);
+    }
+    
     setExpression(newExpression);
     setCurrentStep(0);
     setTotalSteps(0);
     setIsRunning(false);
+    setIsExecuting(false); // 停止执行状态
     setErrorMessage(undefined);
     setSteps([]);
     setStackSteps([]);
@@ -52,7 +59,7 @@ const App: React.FC = () => {
         setErrorMessage(error instanceof Error ? error.message : '解析错误');
       }
     }
-  }, [parseExpressionLocal]);
+  }, [parseExpressionLocal, animationId]);
 
   const handleCompile = useCallback(async () => {
     if (!expression.trim()) return;

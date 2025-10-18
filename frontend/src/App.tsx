@@ -39,7 +39,6 @@ const App: React.FC = () => {
     setIsCompiled(false);
 
     // 重置验证状态，不进行自动编译
-    setIsValid(true);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
   }, [animationId]);
@@ -68,10 +67,12 @@ const App: React.FC = () => {
       setCurrentStep(0);
       setIsCompiled(true);
       setIsStepByStepMode(false);
+      setIsValid(true); // 编译成功，语法正确
       setSuccessMessage(`编译成功！共 ${stackParseSteps.length} 个步骤`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '编译错误');
       setIsCompiled(false);
+      setIsValid(false); // 编译失败，语法错误
     } finally {
       setIsRunning(false);
     }

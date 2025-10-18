@@ -5,6 +5,7 @@ interface ExpressionEditorProps {
   onExpressionChange: (expression: string) => void;
   isValid: boolean;
   errorMessage?: string;
+  successMessage?: string;
 }
 
 export const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
@@ -12,6 +13,7 @@ export const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
   onExpressionChange,
   isValid,
   errorMessage,
+  successMessage,
 }) => {
   return (
     <div className="h-full flex flex-col">
@@ -40,6 +42,12 @@ export const ExpressionEditor: React.FC<ExpressionEditorProps> = ({
         {errorMessage && (
           <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
             <p className="text-sm text-red-600">{errorMessage}</p>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+            <p className="text-sm text-green-600">{successMessage}</p>
           </div>
         )}
 

@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [isValid, setIsValid] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
+  const [successMessage, setSuccessMessage] = useState<string | undefined>();
   const [steps, setSteps] = useState<ParseStep[]>([]);
   const [stackSteps, setStackSteps] = useState<StackStep[]>([]);
   const [isStepByStepMode, setIsStepByStepMode] = useState(false);
@@ -40,6 +41,7 @@ const App: React.FC = () => {
     // 重置验证状态，不进行自动编译
     setIsValid(true);
     setErrorMessage(undefined);
+    setSuccessMessage(undefined);
   }, [animationId]);
 
   const handleCompile = useCallback(async () => {
@@ -54,6 +56,7 @@ const App: React.FC = () => {
     setIsRunning(true);
     setIsExecuting(false); // 停止执行状态
     setErrorMessage(undefined);
+    setSuccessMessage(undefined);
     
     try {
       
@@ -65,6 +68,7 @@ const App: React.FC = () => {
       setCurrentStep(0);
       setIsCompiled(true);
       setIsStepByStepMode(false);
+      setSuccessMessage(`编译成功！共 ${stackParseSteps.length} 个步骤`);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '编译错误');
       setIsCompiled(false);
@@ -177,6 +181,7 @@ const App: React.FC = () => {
             onExpressionChange={handleExpressionChange}
             isValid={isValid}
             errorMessage={errorMessage}
+            successMessage={successMessage}
           />
         </div>
         

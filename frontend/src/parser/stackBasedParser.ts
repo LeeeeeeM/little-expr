@@ -334,9 +334,8 @@ export class StackBasedBrowserParser {
     const operator = this.operatorStack.pop()!;
     
     if (this.operandStack.length < 2) {
-      // 这种情况不应该发生，但为了演示，我们记录这个状态
-      this.addStep(`尝试弹出操作符 ${this.getTokenTypeName(operator.type)}，但操作数不足 (栈中只有 ${this.operandStack.length} 个操作数)`);
-      return;
+      // 操作数不足，这是语法错误
+      throw new Error(`操作数不足：操作符 ${this.getTokenTypeName(operator.type)} 需要两个操作数，但栈中只有 ${this.operandStack.length} 个操作数`);
     }
     
     const right = this.operandStack.pop()!;

@@ -45,7 +45,14 @@ const App: React.FC = () => {
   const handleCompile = useCallback(async () => {
     if (!expression.trim()) return;
     
+    // 停止正在进行的动画
+    if (animationId) {
+      clearTimeout(animationId);
+      setAnimationId(null);
+    }
+    
     setIsRunning(true);
+    setIsExecuting(false); // 停止执行状态
     setErrorMessage(undefined);
     
     try {
@@ -64,7 +71,7 @@ const App: React.FC = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [expression]);
+  }, [expression, animationId]);
 
   const handleStepByStep = useCallback(async () => {
     if (!isCompiled) return;

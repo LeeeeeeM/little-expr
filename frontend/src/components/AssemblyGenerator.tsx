@@ -18,12 +18,9 @@ const generateAssemblyInstruction = (step: StackStep): string | null => {
     }
   }
   
-  // 操作符入栈
+  // 操作符入栈 - 在实际汇编中不需要，跳过
   if (description.includes('操作符') && description.includes('入栈')) {
-    const match = description.match(/操作符 (\w+) 入栈/);
-    if (match) {
-      return `PUSH_OP ${match[1]}`;
-    }
+    return null; // 不生成汇编指令
   }
   
   // 弹出操作符和操作数进行计算
@@ -158,23 +155,23 @@ const generateAssemblyInstruction = (step: StackStep): string | null => {
     
     switch (operator) {
       case 'ADD':
-        return `POP R1\nPOP R1\nADD R1, R1\nPUSH R1\n# Result: ${result}`;
+        return `POP R1\nPOP R2\nADD R1, R2\nPUSH R1\n# Result: ${result}`;
       case 'SUB':
-        return `POP R1\nPOP R1\nSUB R1, R1\nPUSH R1\n# Result: ${result}`;
+        return `POP R1\nPOP R2\nSUB R1, R2\nPUSH R1\n# Result: ${result}`;
       case 'MUL':
-        return `POP R1\nPOP R1\nMUL R1, R1\nPUSH R1\n# Result: ${result}`;
+        return `POP R1\nPOP R2\nMUL R1, R2\nPUSH R1\n# Result: ${result}`;
       case 'DIV':
-        return `POP R1\nPOP R1\nDIV R1, R1\nPUSH R1\n# Result: ${result}`;
+        return `POP R1\nPOP R2\nDIV R1, R2\nPUSH R1\n# Result: ${result}`;
       case 'POWER':
-        return `POP R1\nPOP R1\nPOW R1, R1\nPUSH R1\n# Result: ${result}`;
+        return `POP R1\nPOP R2\nPOW R1, R2\nPUSH R1\n# Result: ${result}`;
       default:
-        return `POP R1\nPOP R1\n${operator} R1, R1\nPUSH R1\n# Result: ${result}`;
+        return `POP R1\nPOP R2\n${operator} R1, R2\nPUSH R1\n# Result: ${result}`;
     }
   }
   
-  // 生成AST节点
+  // 生成AST节点 - 在实际汇编中不需要，跳过
   if (generatedAST) {
-    return `STORE_RESULT`;
+    return null; // 不生成汇编指令
   }
   
   // 最终AST
@@ -210,14 +207,20 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
   
   // 生成当前步骤对应的汇编指令
   const currentStepData = steps[currentStep - 1];
-  const currentInstruction = currentStepData ? generateAssemblyInstruction(currentStepData) : null;
+  let currentInstruction = null;
+  let currentDescription = '';
+  
+  if (currentStepData) {
+    currentInstruction = generateAssemblyInstruction(currentStepData);
+    currentDescription = currentStepData.description;
+  }
   
   // 生成所有已执行步骤的汇编指令
   const assemblyInstructions = steps
     .slice(0, currentStep)
     .map((step, index) => {
       const instruction = generateAssemblyInstruction(step);
-      return instruction ? `${index + 1}. ${instruction}` : null;
+      return instruction ? { stepNumber: index + 1, instruction } : null;
     })
     .filter(Boolean);
 
@@ -239,13 +242,21 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
-        {/* 当前指令 */}
-        {currentInstruction && (
+        {/* 当前步骤 - 只在执行过程中显示 */}
+        {currentStepData && currentStep < steps.length && (
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <h3 className="text-sm font-medium text-blue-700 mb-2">当前指令:</h3>
-            <div className="font-mono text-sm text-blue-800 bg-white p-2 rounded border whitespace-pre-line">
-              {currentInstruction}
+            <h3 className="text-sm font-medium text-blue-700 mb-2">当前步骤:</h3>
+            <div className="text-sm text-blue-800 mb-2">
+              {currentDescription}
             </div>
+            {currentInstruction && (
+              <>
+                <h3 className="text-sm font-medium text-blue-700 mb-2">汇编指令:</h3>
+                <div className="font-mono text-sm text-blue-800 bg-white p-2 rounded border whitespace-pre-line">
+                  {currentInstruction}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -257,16 +268,24 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
           <h3 className="text-sm font-medium text-gray-700 mb-3">汇编指令序列:</h3>
           {assemblyInstructions.length > 0 ? (
             <div className="space-y-1">
-              {assemblyInstructions.map((instruction, index) => (
+              {assemblyInstructions.map((item, index) => item && (
                 <div
                   key={index}
-                  className={`font-mono text-xs p-2 rounded whitespace-pre-line ${
+                  className={`text-xs p-2 rounded ${
                     index === assemblyInstructions.length - 1
                       ? 'bg-green-100 text-green-800 border border-green-200'
                       : 'bg-white text-gray-700 border border-gray-200'
                   }`}
                 >
-                  {instruction}
+                  <div className="text-xs font-semibold mb-1">步骤 {item.stepNumber}:</div>
+                  <div className="font-mono whitespace-pre-line">
+                    {item.instruction.split('\n').filter(line => !line.includes('# Result:')).join('\n')}
+                  </div>
+                  {item.instruction.includes('# Result:') && (
+                    <div className="text-xs text-green-700 mt-2 font-mono font-semibold">
+                      {item.instruction.split('\n').find(line => line.includes('# Result:'))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

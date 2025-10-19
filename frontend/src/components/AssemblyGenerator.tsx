@@ -1,10 +1,29 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import type { StackStep } from '../parser/stackBasedParser';
 
 interface AssemblyGeneratorProps {
   steps: StackStep[];
   currentStep: number;
 }
+
+// 生成完整的汇编指令（不包含步骤和结果信息）
+const generateCompleteAssembly = (steps: StackStep[]): string => {
+  const instructions: string[] = [];
+  
+  steps.forEach(step => {
+    const instruction = generateAssemblyInstruction(step);
+    if (instruction) {
+      // 移除步骤号和结果信息，只保留纯汇编指令
+      const cleanInstruction = instruction
+        .split('\n')
+        .filter(line => !line.includes('# Result:') && !line.includes('# Final Result:'))
+        .join('\n');
+      instructions.push(cleanInstruction);
+    }
+  });
+  
+  return instructions.join('\n');
+};
 
 // 根据栈步骤生成汇编指令
 const generateAssemblyInstruction = (step: StackStep): string | null => {
@@ -204,6 +223,7 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
   currentStep,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showModal, setShowModal] = useState(false);
   
   // 生成当前步骤对应的汇编指令
   const currentStepData = steps[currentStep - 1];
@@ -224,6 +244,9 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
     })
     .filter(Boolean);
 
+  // 生成完整的汇编指令（用于悬浮提示）
+  const completeAssembly = generateCompleteAssembly(steps);
+
   // 自动滚动到最新指令
   useEffect(() => {
     if (scrollContainerRef.current && assemblyInstructions.length > 0) {
@@ -235,7 +258,23 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
-        <h2 className="text-lg font-semibold text-gray-900">汇编生成</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900">汇编生成</h2>
+          {steps.length > 0 && (
+            <div className="relative group">
+              <button
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={() => setShowModal(true)}
+              >
+                📋
+              </button>
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap">
+                点击查看完整汇编指令
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="text-sm text-gray-600">
           步骤: {currentStep} / {steps.length}
         </div>
@@ -298,6 +337,28 @@ export const AssemblyGenerator: React.FC<AssemblyGeneratorProps> = ({
           )}
         </div>
       </div>
+
+      {/* 弹窗 */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">完整汇编指令</h3>
+              <button
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={() => setShowModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <pre className="text-sm font-mono whitespace-pre-wrap bg-gray-50 p-4 rounded border">
+                {completeAssembly}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

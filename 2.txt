@@ -1,0 +1,573 @@
+Statement Code Generator started! Type 'exit' to quit.
+Input your program:
+
+=== AST结构 ===
+{
+  "type": "Program",
+  "statements": [
+    {
+      "type": "FunctionDeclaration",
+      "name": "change",
+      "returnType": "int",
+      "parameters": [
+        {
+          "name": "a",
+          "type": "int"
+        },
+        {
+          "name": "b",
+          "type": "int"
+        }
+      ],
+      "body": {
+        "type": "BlockStatement",
+        "statements": [
+          {
+            "type": "VariableDeclaration",
+            "name": "c",
+            "dataType": "int",
+            "initializer": {
+              "type": "NumberLiteral",
+              "value": 5
+            }
+          },
+          {
+            "type": "VariableDeclaration",
+            "name": "d",
+            "dataType": "int",
+            "initializer": {
+              "type": "NumberLiteral",
+              "value": 2
+            }
+          },
+          {
+            "type": "VariableDeclaration",
+            "name": "e",
+            "dataType": "int",
+            "initializer": {
+              "type": "NumberLiteral",
+              "value": 0
+            }
+          },
+          {
+            "type": "IfStatement",
+            "condition": {
+              "type": "BinaryExpression",
+              "operator": ">=",
+              "left": {
+                "type": "Identifier",
+                "name": "a"
+              },
+              "right": {
+                "type": "Identifier",
+                "name": "b"
+              }
+            },
+            "thenBranch": {
+              "type": "BlockStatement",
+              "statements": [
+                {
+                  "type": "AssignmentStatement",
+                  "target": {
+                    "type": "Identifier",
+                    "name": "e"
+                  },
+                  "value": {
+                    "type": "BinaryExpression",
+                    "operator": "+",
+                    "left": {
+                      "type": "BinaryExpression",
+                      "operator": "*",
+                      "left": {
+                        "type": "Identifier",
+                        "name": "a"
+                      },
+                      "right": {
+                        "type": "Identifier",
+                        "name": "b"
+                      }
+                    },
+                    "right": {
+                      "type": "BinaryExpression",
+                      "operator": "*",
+                      "left": {
+                        "type": "Identifier",
+                        "name": "c"
+                      },
+                      "right": {
+                        "type": "Identifier",
+                        "name": "d"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "elseBranch": {
+              "type": "BlockStatement",
+              "statements": [
+                {
+                  "type": "AssignmentStatement",
+                  "target": {
+                    "type": "Identifier",
+                    "name": "e"
+                  },
+                  "value": {
+                    "type": "BinaryExpression",
+                    "operator": "-",
+                    "left": {
+                      "type": "BinaryExpression",
+                      "operator": "*",
+                      "left": {
+                        "type": "Identifier",
+                        "name": "a"
+                      },
+                      "right": {
+                        "type": "Identifier",
+                        "name": "b"
+                      }
+                    },
+                    "right": {
+                      "type": "BinaryExpression",
+                      "operator": "*",
+                      "left": {
+                        "type": "Identifier",
+                        "name": "c"
+                      },
+                      "right": {
+                        "type": "Identifier",
+                        "name": "d"
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "EmptyStatement"
+                }
+              ]
+            }
+          },
+          {
+            "type": "ReturnStatement",
+            "value": {
+              "type": "BinaryExpression",
+              "operator": "+",
+              "left": {
+                "type": "Identifier",
+                "name": "e"
+              },
+              "right": {
+                "type": "NumberLiteral",
+                "value": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "FunctionDeclaration",
+      "name": "main",
+      "returnType": "int",
+      "parameters": [],
+      "body": {
+        "type": "BlockStatement",
+        "statements": [
+          {
+            "type": "VariableDeclaration",
+            "name": "sum",
+            "dataType": "int",
+            "initializer": {
+              "type": "NumberLiteral",
+              "value": 0
+            }
+          },
+          {
+            "type": "VariableDeclaration",
+            "name": "count",
+            "dataType": "int",
+            "initializer": {
+              "type": "NumberLiteral",
+              "value": 1
+            }
+          },
+          {
+            "type": "VariableDeclaration",
+            "name": "maxCount",
+            "dataType": "int",
+            "initializer": {
+              "type": "NumberLiteral",
+              "value": 10
+            }
+          },
+          {
+            "type": "WhileStatement",
+            "condition": {
+              "type": "BinaryExpression",
+              "operator": "<=",
+              "left": {
+                "type": "Identifier",
+                "name": "count"
+              },
+              "right": {
+                "type": "Identifier",
+                "name": "maxCount"
+              }
+            },
+            "body": {
+              "type": "BlockStatement",
+              "statements": [
+                {
+                  "type": "IfStatement",
+                  "condition": {
+                    "type": "BinaryExpression",
+                    "operator": ">",
+                    "left": {
+                      "type": "Identifier",
+                      "name": "count"
+                    },
+                    "right": {
+                      "type": "NumberLiteral",
+                      "value": 5
+                    }
+                  },
+                  "thenBranch": {
+                    "type": "BlockStatement",
+                    "statements": [
+                      {
+                        "type": "AssignmentStatement",
+                        "target": {
+                          "type": "Identifier",
+                          "name": "sum"
+                        },
+                        "value": {
+                          "type": "BinaryExpression",
+                          "operator": "+",
+                          "left": {
+                            "type": "Identifier",
+                            "name": "sum"
+                          },
+                          "right": {
+                            "type": "BinaryExpression",
+                            "operator": "*",
+                            "left": {
+                              "type": "Identifier",
+                              "name": "count"
+                            },
+                            "right": {
+                              "type": "NumberLiteral",
+                              "value": 2
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "EmptyStatement"
+                      },
+                      {
+                        "type": "ExpressionStatement",
+                        "expression": {
+                          "type": "FunctionCall",
+                          "callee": {
+                            "type": "Identifier",
+                            "name": "print"
+                          },
+                          "arguments": [
+                            {
+                              "type": "Identifier",
+                              "name": "sum"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "elseBranch": {
+                    "type": "BlockStatement",
+                    "statements": [
+                      {
+                        "type": "AssignmentStatement",
+                        "target": {
+                          "type": "Identifier",
+                          "name": "sum"
+                        },
+                        "value": {
+                          "type": "BinaryExpression",
+                          "operator": "+",
+                          "left": {
+                            "type": "Identifier",
+                            "name": "sum"
+                          },
+                          "right": {
+                            "type": "Identifier",
+                            "name": "count"
+                          }
+                        }
+                      },
+                      {
+                        "type": "EmptyStatement"
+                      },
+                      {
+                        "type": "ExpressionStatement",
+                        "expression": {
+                          "type": "FunctionCall",
+                          "callee": {
+                            "type": "Identifier",
+                            "name": "print"
+                          },
+                          "arguments": [
+                            {
+                              "type": "Identifier",
+                              "name": "sum"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "AssignmentStatement",
+                  "target": {
+                    "type": "Identifier",
+                    "name": "count"
+                  },
+                  "value": {
+                    "type": "BinaryExpression",
+                    "operator": "+",
+                    "left": {
+                      "type": "Identifier",
+                      "name": "count"
+                    },
+                    "right": {
+                      "type": "NumberLiteral",
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "type": "EmptyStatement"
+                }
+              ]
+            }
+          },
+          {
+            "type": "AssignmentStatement",
+            "target": {
+              "type": "Identifier",
+              "name": "sum"
+            },
+            "value": {
+              "type": "FunctionCall",
+              "callee": {
+                "type": "Identifier",
+                "name": "change"
+              },
+              "arguments": [
+                {
+                  "type": "Identifier",
+                  "name": "sum"
+                },
+                {
+                  "type": "Identifier",
+                  "name": "maxCount"
+                }
+              ]
+            }
+          },
+          {
+            "type": "ExpressionStatement",
+            "expression": {
+              "type": "FunctionCall",
+              "callee": {
+                "type": "Identifier",
+                "name": "print"
+              },
+              "arguments": [
+                {
+                  "type": "Identifier",
+                  "name": "sum"
+                }
+              ]
+            }
+          },
+          {
+            "type": "ReturnStatement",
+            "value": {
+              "type": "NumberLiteral",
+              "value": 0
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+=== 生成的汇编代码 ===
+; Generated assembly code
+.data
+  ; Variables will be declared here
+
+.text
+.global _start
+
+_start:
+  call function_main     ; 调用main函数
+  exit                  ; 退出程序
+
+function_change:
+  push ebp
+  mov ebp, esp
+  sub esp, 3            ; 为3个局部变量分配栈空间
+  mov eax, 5         ; 加载常量 5
+  SI -1              ; 初始化 c
+  mov eax, 2         ; 加载常量 2
+  SI -2              ; 初始化 d
+  mov eax, 0         ; 加载常量 0
+  SI -3              ; 初始化 e
+  LI +2              ; 加载参数 a
+  LI +3              ; 加载参数 b
+  mov eax, eax
+  push eax              ; 保存左操作数到栈
+  mov eax, eax
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jl else_0
+  LI +2              ; 加载参数 a
+  push eax              ; 保存左操作数到栈
+  LI +3              ; 加载参数 b
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  push eax              ; 保存左操作数到栈
+  LI -1              ; 加载局部变量 c
+  push eax              ; 保存左操作数到栈
+  LI -2              ; 加载局部变量 d
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -3              ; 存储到 e
+  jmp end_1
+else_0:
+  LI +2              ; 加载参数 a
+  push eax              ; 保存左操作数到栈
+  LI +3              ; 加载参数 b
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  push eax              ; 保存左操作数到栈
+  LI -1              ; 加载局部变量 c
+  push eax              ; 保存左操作数到栈
+  LI -2              ; 加载局部变量 d
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  sub eax, ebx          ; 执行减法
+  SI -3              ; 存储到 e
+end_1:
+  LI -3              ; 加载局部变量 e
+  push eax              ; 保存左操作数到栈
+  mov eax, 1         ; 加载常量 1
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  pop ebp                  ; 恢复调用者BP
+  ret                      ; 返回调用者
+
+function_main:
+  push ebp
+  mov ebp, esp
+  sub esp, 3            ; 为3个局部变量分配栈空间
+  mov eax, 0         ; 加载常量 0
+  SI -1              ; 初始化 sum
+  mov eax, 1         ; 加载常量 1
+  SI -2              ; 初始化 count
+  mov eax, 10         ; 加载常量 10
+  SI -3              ; 初始化 maxCount
+loop_2:
+  LI -2              ; 加载局部变量 count
+  LI -3              ; 加载局部变量 maxCount
+  mov eax, eax
+  push eax              ; 保存左操作数到栈
+  mov eax, eax
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jg end_3
+  LI -2              ; 加载局部变量 count
+  mov eax, 5         ; 加载常量 5
+  mov eax, eax
+  push eax              ; 保存左操作数到栈
+  mov eax, eax
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jle else_4
+  LI -1              ; 加载局部变量 sum
+  push eax              ; 保存左操作数到栈
+  LI -2              ; 加载局部变量 count
+  push eax              ; 保存左操作数到栈
+  mov eax, 2         ; 加载常量 2
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -1              ; 存储到 sum
+  LI -1              ; 加载局部变量 sum
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+  jmp end_5
+else_4:
+  LI -1              ; 加载局部变量 sum
+  push eax              ; 保存左操作数到栈
+  LI -2              ; 加载局部变量 count
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -1              ; 存储到 sum
+  LI -1              ; 加载局部变量 sum
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+end_5:
+  LI -2              ; 加载局部变量 count
+  push eax              ; 保存左操作数到栈
+  mov eax, 1         ; 加载常量 1
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -2              ; 存储到 count
+  jmp loop_2
+end_3:
+  LI -3              ; 加载局部变量 maxCount
+  push eax        ; 参数2入栈
+  LI -1              ; 加载局部变量 sum
+  push eax        ; 参数1入栈
+  call function_change
+  add esp, 2      ; 清理栈参数
+  SI -1              ; 存储到 sum
+  LI -1              ; 加载局部变量 sum
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+  mov eax, 0         ; 加载常量 0
+  pop ebp                  ; 恢复调用者BP
+  ret                      ; 返回调用者
+
+Input your program (or 'exit' to quit):

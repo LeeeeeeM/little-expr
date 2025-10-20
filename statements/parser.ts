@@ -93,6 +93,14 @@ export class StatementParser {
 
     switch (token.type) {
       case TokenType.INT:
+        // 检查是否是函数定义 (int main() { ... })
+        const intNextToken = this.lexer.getNextToken();
+        if (intNextToken?.type === TokenType.IDENTIFIER) {
+          const thirdToken = this.lexer.peek(2);
+          if (thirdToken?.type === TokenType.LEFTPAREN) {
+            return this.parseFunctionDeclaration();
+          }
+        }
         return this.parseVariableDeclaration();
       case TokenType.FUNCTION:
         return this.parseFunctionDeclaration();
@@ -162,14 +170,31 @@ export class StatementParser {
   }
 
   private parseFunctionDeclaration(): FunctionDeclaration {
-    this.expect(TokenType.FUNCTION);
-    const name = this.parseIdentifierName();
+    // 支持两种语法：
+    // 1. function name() { ... }
+    // 2. int name() { ... }
+    let returnType: DataType;
+    let name: string;
+    
+    const currentToken = this.lexer.getCurrentToken();
+    if (currentToken?.type === TokenType.FUNCTION) {
+      // function name() { ... }
+      this.lexer.advance();
+      name = this.parseIdentifierName();
+      returnType = 'void' as DataType;
+    } else if (currentToken?.type === TokenType.INT) {
+      // int name() { ... }
+      this.lexer.advance();
+      name = this.parseIdentifierName();
+      returnType = 'int' as DataType;
+    } else {
+      throw new Error('Expected function or int keyword');
+    }
     
     this.expect(TokenType.LEFTPAREN);
     const parameters = this.parseParameterList();
     this.expect(TokenType.RIGHTPAREN);
     
-    const returnType = this.parseDataType();
     const body = this.parseBlockStatement();
 
     // 添加到当前作用域

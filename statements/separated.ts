@@ -85,22 +85,41 @@ export class StatementCodeGenerator {
     this.assemblyCode.push('');
     this.assemblyCode.push('_start:');
     
-    // 设置栈帧
-    this.assemblyCode.push('  push ebp              ; 保存调用者的BP');
-    this.assemblyCode.push('  mov ebp, esp          ; 设置当前栈帧');
+    // 检查是否有main函数
+    const hasMainFunction = program.statements.some(stmt => 
+      stmt.type === 'FunctionDeclaration' && (stmt as FunctionDeclaration).name === 'main'
+    );
     
-    // 计算需要的栈空间
-    const variableCount = this.countVariables(program);
-    this.assemblyCode.push(`  sub esp, ${variableCount}            ; 为${variableCount}个局部变量分配栈空间`);
-    
-    for (const statement of program.statements) {
-      this.generateStatement(statement);
+    if (hasMainFunction) {
+      // 如果有main函数，先调用main函数
+      this.assemblyCode.push('  call function_main     ; 调用main函数');
+      this.assemblyCode.push('  exit                  ; 退出程序');
+    } else {
+      // 没有main函数，直接执行语句
+      // 设置栈帧
+      this.assemblyCode.push('  push ebp              ; 保存调用者的BP');
+      this.assemblyCode.push('  mov ebp, esp          ; 设置当前栈帧');
+      
+      // 计算需要的栈空间
+      const variableCount = this.countVariables(program);
+      this.assemblyCode.push(`  sub esp, ${variableCount}            ; 为${variableCount}个局部变量分配栈空间`);
+      
+      for (const statement of program.statements) {
+        this.generateStatement(statement);
+      }
+      
+      // 清理栈帧
+      this.assemblyCode.push('  mov esp, ebp          ; 恢复栈指针');
+      this.assemblyCode.push('  pop ebp               ; 恢复调用者的BP');
+      this.assemblyCode.push('  exit                  ; 退出程序');
     }
     
-    // 清理栈帧
-    this.assemblyCode.push('  mov esp, ebp          ; 恢复栈指针');
-    this.assemblyCode.push('  pop ebp               ; 恢复调用者的BP');
-    this.assemblyCode.push('  exit                  ; 退出程序');
+    // 生成所有函数定义
+    for (const statement of program.statements) {
+      if (statement.type === 'FunctionDeclaration') {
+        this.generateFunctionDeclaration(statement as FunctionDeclaration);
+      }
+    }
   }
 
   private generateStatement(statement: Statement): void {
@@ -195,12 +214,40 @@ export class StatementCodeGenerator {
     this.assemblyCode.push(`function_${statement.name}:`);
     this.assemblyCode.push(`  push ebp`);
     this.assemblyCode.push(`  mov ebp, esp`);
+    // 为函数建立独立的局部作用域：局部变量应从 ebp-1 开始
+    const prevVariables = this.variables;
+    const prevStackOffset = this.stackOffset;
+    this.variables = new Map();
+    this.stackOffset = 0;
+    
+    // 处理函数参数 - 参数在栈上，从ebp+2开始（跳过返回地址1字节和ebp1字节）
+    let paramOffset = 2; // ebp+2是第一个参数
+    for (const param of statement.parameters) {
+      const stackAddr = `[ebp+${paramOffset}]`;
+      this.variables.set(param.name, stackAddr);
+      paramOffset += 1; // 每个参数1字节
+    }
+    
+    // 为局部变量分配栈空间
+    const localVarCount = this.countLocalVariables(statement.body);
+    if (localVarCount > 0) {
+      this.assemblyCode.push(`  sub esp, ${localVarCount}            ; 为${localVarCount}个局部变量分配栈空间`);
+    }
     
     // 生成函数体
     this.generateStatement(statement.body);
     
-    this.assemblyCode.push(`  pop ebp`);
-    this.assemblyCode.push(`  ret`);
+    // 如果没有显式的return语句，添加默认的ret
+    // 检查函数体是否包含return语句
+    const hasReturnStatement = this.hasReturnStatement(statement.body);
+    if (!hasReturnStatement) {
+      this.assemblyCode.push(`  pop ebp`);
+      this.assemblyCode.push(`  ret`);
+    }
+
+    // 恢复外层作用域（用于后续函数或全局）
+    this.variables = prevVariables;
+    this.stackOffset = prevStackOffset;
   }
 
   private generateIfStatement(statement: IfStatement): void {
@@ -272,10 +319,40 @@ export class StatementCodeGenerator {
 
   private generateReturnStatement(statement: ReturnStatement): void {
     if (statement.value) {
-      const value = this.generateExpression(statement.value);
-      this.assemblyCode.push(`  mov eax, ${value}`);
+      this.generateExpression(statement.value); // Result is in eax
+      // 返回值已在eax中，无需额外操作
+    } else {
+      this.assemblyCode.push(`  mov eax, 0              ; 默认返回值0`);
     }
-    this.assemblyCode.push(`  ret`);
+    this.assemblyCode.push(`  pop ebp                  ; 恢复调用者BP`);
+    this.assemblyCode.push(`  ret                      ; 返回调用者`);
+  }
+
+  private hasReturnStatement(body: BlockStatement): boolean {
+    for (const stmt of body.statements) {
+      if (stmt.type === 'ReturnStatement') {
+        return true;
+      }
+      if (stmt.type === 'BlockStatement') {
+        if (this.hasReturnStatement(stmt as BlockStatement)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private countLocalVariables(body: BlockStatement): number {
+    let count = 0;
+    for (const stmt of body.statements) {
+      if (stmt.type === 'VariableDeclaration') {
+        count++;
+      }
+      if (stmt.type === 'BlockStatement') {
+        count += this.countLocalVariables(stmt as BlockStatement);
+      }
+    }
+    return count;
   }
 
   private generateBreakStatement(statement: BreakStatement): void {
@@ -314,19 +391,29 @@ export class StatementCodeGenerator {
   }
 
   private generateNumberLiteral(expression: NumberLiteral): string {
-    return expression.value.toString();
+    this.assemblyCode.push(`  mov eax, ${expression.value}         ; 加载常量 ${expression.value}`);
+    return 'eax';
   }
 
   private generateIdentifier(expression: Identifier): string {
     const varName = expression.name;
     if (this.variables.has(varName)) {
       const stackAddr = this.variables.get(varName)!;
-      // 提取偏移量，例如从 [ebp-4] 提取 -4
-      const offset = stackAddr.match(/\[ebp-(\d+)\]/)?.[1];
-      if (offset) {
-        this.assemblyCode.push(`  LI -${offset}              ; 加载 ${varName}`);
+      
+      // 处理局部变量 [ebp-偏移]
+      const negativeOffset = stackAddr.match(/\[ebp-(\d+)\]/)?.[1];
+      if (negativeOffset) {
+        this.assemblyCode.push(`  LI -${negativeOffset}              ; 加载局部变量 ${varName}`);
         return 'eax'; // LI指令将值加载到eax中
       }
+      
+      // 处理函数参数 [ebp+偏移]
+      const positiveOffset = stackAddr.match(/\[ebp\+(\d+)\]/)?.[1];
+      if (positiveOffset) {
+        this.assemblyCode.push(`  LI +${positiveOffset}              ; 加载参数 ${varName}`);
+        return 'eax'; // LI指令将值加载到eax中
+      }
+      
       return stackAddr; // 回退到原来的方式
     } else {
       throw new Error(`Undefined variable: ${varName}`);
@@ -334,33 +421,30 @@ export class StatementCodeGenerator {
   }
 
   private generateBinaryExpression(expression: BinaryExpression): string {
-    const left = this.generateExpression(expression.left);
-    const right = this.generateExpression(expression.right);
+    // 生成左操作数，结果在eax
+    this.generateExpression(expression.left);
+    this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+    
+    // 生成右操作数，结果在eax
+    this.generateExpression(expression.right);
+    this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+    
+    // 从栈恢复左操作数到eax
+    this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
     
     switch (expression.operator) {
       case '+':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  add eax, ebx          ; 执行加法`);
-        return 'eax'; // 直接返回寄存器
+        return 'eax';
       case '-':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  sub eax, ebx          ; 执行减法`);
         return 'eax';
       case '*':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  imul eax, ebx         ; 执行乘法`);
         return 'eax';
       case '/':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
-        this.assemblyCode.push(`  idiv ebx              ; 执行除法`);
+        this.assemblyCode.push(`  mov edx, 0            ; 清零edx`);
+        this.assemblyCode.push(`  idiv ebx             ; 执行除法`);
         return 'eax';
       case '**':
         // 指数运算需要特殊处理
@@ -368,69 +452,49 @@ export class StatementCodeGenerator {
         this.assemblyCode.push(`  mov eax, 1  ; result = 1`);
         return 'eax';
       case '==':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
         this.assemblyCode.push(`  sete al               ; 设置相等标志`);
         return 'eax';
       case '!=':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
         this.assemblyCode.push(`  setne al              ; 设置不等标志`);
         return 'eax';
       case '<':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
         this.assemblyCode.push(`  setl al               ; 设置小于标志`);
         return 'eax';
       case '<=':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
         this.assemblyCode.push(`  setle al              ; 设置小于等于标志`);
         return 'eax';
       case '>':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
         this.assemblyCode.push(`  setg al               ; 设置大于标志`);
         return 'eax';
       case '>=':
-        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
-        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
         this.assemblyCode.push(`  setge al              ; 设置大于等于标志`);
         return 'eax';
       case '&&':
-        this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  je &&_false`);
-        this.assemblyCode.push(`  mov eax, ${right}`);
-        this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  je &&_false`);
-        this.assemblyCode.push(`  mov eax, 1`);
-        this.assemblyCode.push(`  jmp &&_end`);
+        this.assemblyCode.push(`  cmp eax, 0            ; 检查左操作数`);
+        this.assemblyCode.push(`  je &&_false           ; 如果为0则跳转`);
+        this.assemblyCode.push(`  cmp ebx, 0            ; 检查右操作数`);
+        this.assemblyCode.push(`  je &&_false           ; 如果为0则跳转`);
+        this.assemblyCode.push(`  mov eax, 1            ; 都为真，结果为1`);
+        this.assemblyCode.push(`  jmp &&_end            ; 跳转到结束`);
         this.assemblyCode.push(`&&_false:`);
-        this.assemblyCode.push(`  mov eax, 0`);
+        this.assemblyCode.push(`  mov eax, 0            ; 结果为0`);
         this.assemblyCode.push(`&&_end:`);
         return 'eax';
       case '||':
-        this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  jne ||_true`);
-        this.assemblyCode.push(`  mov eax, ${right}`);
-        this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  jne ||_true`);
-        this.assemblyCode.push(`  mov eax, 0`);
-        this.assemblyCode.push(`  jmp ||_end`);
+        this.assemblyCode.push(`  cmp eax, 0            ; 检查左操作数`);
+        this.assemblyCode.push(`  jne ||_true           ; 如果不为0则跳转`);
+        this.assemblyCode.push(`  cmp ebx, 0            ; 检查右操作数`);
+        this.assemblyCode.push(`  jne ||_true           ; 如果不为0则跳转`);
+        this.assemblyCode.push(`  mov eax, 0            ; 都为假，结果为0`);
+        this.assemblyCode.push(`  jmp ||_end            ; 跳转到结束`);
         this.assemblyCode.push(`||_true:`);
-        this.assemblyCode.push(`  mov eax, 1`);
+        this.assemblyCode.push(`  mov eax, 1            ; 结果为1`);
         this.assemblyCode.push(`||_end:`);
         return 'eax';
       default:
@@ -478,8 +542,20 @@ export class StatementCodeGenerator {
       throw new Error(`Undefined function: ${functionName}`);
     }
     
+    // 生成函数调用参数 - 从右到左入栈
+    for (let i = expression.arguments.length - 1; i >= 0; i--) {
+      this.generateExpression(expression.arguments[i]!); // Result is in eax
+      this.assemblyCode.push(`  push eax        ; 参数${i + 1}入栈`);
+    }
+    
     // 生成函数调用
     this.assemblyCode.push(`  call function_${functionName}`);
+    
+    // 清理栈参数
+    if (expression.arguments.length > 0) {
+      this.assemblyCode.push(`  add esp, ${expression.arguments.length}      ; 清理栈参数`);
+    }
+    
     // 函数返回值已经在eax中，直接返回
     return 'eax';
   }
@@ -561,6 +637,7 @@ export class StatementCodeGenerator {
           count++;
         }
       }
+      // 注意：函数声明中的变量不计入全局变量计数
     }
     return count;
   }

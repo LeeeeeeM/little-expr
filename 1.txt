@@ -1,0 +1,106 @@
+; ===============================================
+; 原始源代码
+; ===============================================
+; int sum = 0;
+; int count = 1;
+; int maxCount = 10;
+;
+; while (count <= maxCount) {
+;     if (count > 5) {
+;         sum = sum + count * 2;
+;         print(sum);
+;     } else {
+;         sum = sum + count;
+;         print(sum);
+;     }
+;     count = count + 1;
+; }
+;
+; print(sum);
+;
+; 预期输出: 1, 3, 6, 10, 15, 27, 41, 57, 75, 95, 95
+; 最终变量状态: sum=95, count=11, maxCount=10
+; ===============================================
+
+; Generated assembly code
+.data
+  ; Variables will be declared here
+
+.text
+.global _start
+
+_start:
+  push ebp              ; 保存调用者的BP
+  mov ebp, esp          ; 设置当前栈帧
+  sub esp, 3            ; 为3个局部变量分配栈空间
+  SI -1              ; 初始化 sum
+  SI -2              ; 初始化 count
+  SI -3              ; 初始化 maxCount
+loop_0:
+  LI -2              ; 加载 count
+  LI -3              ; 加载 maxCount
+  mov eax, eax
+  push eax              ; 保存左操作数到栈
+  mov eax, eax
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jg end_1
+  LI -2              ; 加载 count
+  mov eax, eax
+  push eax              ; 保存左操作数到栈
+  mov eax, 5
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jle else_2
+  LI -1              ; 加载 sum
+  LI -2              ; 加载 count
+  push eax              ; 保存左操作数到栈
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  push eax              ; 保存左操作数到栈
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -1              ; 存储到 sum
+  LI -1              ; 加载 sum
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+  jmp end_3
+else_2:
+  LI -1              ; 加载 sum
+  LI -2              ; 加载 count
+  push eax              ; 保存左操作数到栈
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -1              ; 存储到 sum
+  LI -1              ; 加载 sum
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+end_3:
+  LI -2              ; 加载 count
+  push eax              ; 保存左操作数到栈
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -2              ; 存储到 count
+  jmp loop_0
+end_1:
+  LI -1              ; 加载 sum
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+  mov esp, ebp          ; 恢复栈指针
+  pop ebp               ; 恢复调用者的BP
+  exit                  ; 退出程序

@@ -28,8 +28,9 @@ export class StatementCodeGenerator {
   private assemblyCode: string[] = [];
   private tempVarCounter = 0;
   private labelCounter = 0;
-  private variables: Map<string, string> = new Map(); // 变量名 -> 寄存器/内存地址
+  private variables: Map<string, string> = new Map(); // 变量名 -> 栈偏移地址
   private functions: Map<string, FunctionDeclaration> = new Map();
+  private stackOffset = 0; // 当前栈偏移
 
   constructor() {
     this.setupBuiltinFunctions();
@@ -84,13 +85,22 @@ export class StatementCodeGenerator {
     this.assemblyCode.push('');
     this.assemblyCode.push('_start:');
     
+    // 设置栈帧
+    this.assemblyCode.push('  push ebp              ; 保存调用者的BP');
+    this.assemblyCode.push('  mov ebp, esp          ; 设置当前栈帧');
+    
+    // 计算需要的栈空间
+    const variableCount = this.countVariables(program);
+    this.assemblyCode.push(`  sub esp, ${variableCount}            ; 为${variableCount}个局部变量分配栈空间`);
+    
     for (const statement of program.statements) {
       this.generateStatement(statement);
     }
     
-    this.assemblyCode.push('  mov eax, 1      ; exit system call');
-    this.assemblyCode.push('  mov ebx, 0      ; exit code');
-    this.assemblyCode.push('  int 0x80        ; interrupt');
+    // 清理栈帧
+    this.assemblyCode.push('  mov esp, ebp          ; 恢复栈指针');
+    this.assemblyCode.push('  pop ebp               ; 恢复调用者的BP');
+    this.assemblyCode.push('  exit                  ; 退出程序');
   }
 
   private generateStatement(statement: Statement): void {
@@ -137,32 +147,44 @@ export class StatementCodeGenerator {
   }
 
   private generateExpressionStatement(statement: ExpressionStatement): void {
-    const tempVar = this.generateExpression(statement.expression);
-    this.assemblyCode.push(`  ; Expression result stored in ${tempVar}`);
+    this.generateExpression(statement.expression);
+    this.assemblyCode.push(`  ; Expression result in eax`);
   }
 
   private generateAssignmentStatement(statement: AssignmentStatement): void {
-    const value = this.generateExpression(statement.value);
+    this.generateExpression(statement.value); // Result is in eax
     const target = statement.target.name;
     
     if (!this.variables.has(target)) {
-      this.variables.set(target, `var_${target}`);
+      const offset = this.stackOffset + 1; // 从ebp-1开始
+      const stackAddr = `[ebp-${offset}]`;
+      this.variables.set(target, stackAddr);
+      this.stackOffset += 1;
     }
     
-    this.assemblyCode.push(`  mov eax, ${value}`);
-    this.assemblyCode.push(`  mov [${this.variables.get(target)}], eax`);
+    // 使用SI指令存储
+    const stackAddr = this.variables.get(target)!;
+    const offset = stackAddr.match(/\[ebp-(\d+)\]/)?.[1];
+    if (offset) {
+      this.assemblyCode.push(`  SI -${offset}              ; 存储到 ${target}`);
+    } else {
+      // 回退到原来的方式
+      this.assemblyCode.push(`  mov ${stackAddr}, eax`);
+    }
   }
 
   private generateVariableDeclaration(statement: VariableDeclaration): void {
     const varName = statement.name;
-    this.variables.set(varName, `var_${varName}`);
+    const offset = this.stackOffset + 1; // 从ebp-1开始
+    const stackAddr = `[ebp-${offset}]`;
+    this.variables.set(varName, stackAddr);
+    this.stackOffset += 1; // 每个变量占用1字节偏移
     
     if (statement.initializer) {
-      const value = this.generateExpression(statement.initializer);
-      this.assemblyCode.push(`  mov eax, ${value}`);
-      this.assemblyCode.push(`  mov [var_${varName}], eax`);
+      this.generateExpression(statement.initializer); // Result is in eax
+      this.assemblyCode.push(`  SI -${offset}              ; 初始化 ${varName}`);
     } else {
-      this.assemblyCode.push(`  mov dword [var_${varName}], 0  ; Initialize to 0`);
+      this.assemblyCode.push(`  mov dword ${stackAddr}, 0  ; Initialize to 0`);
     }
   }
 
@@ -298,7 +320,14 @@ export class StatementCodeGenerator {
   private generateIdentifier(expression: Identifier): string {
     const varName = expression.name;
     if (this.variables.has(varName)) {
-      return `[${this.variables.get(varName)}]`;
+      const stackAddr = this.variables.get(varName)!;
+      // 提取偏移量，例如从 [ebp-4] 提取 -4
+      const offset = stackAddr.match(/\[ebp-(\d+)\]/)?.[1];
+      if (offset) {
+        this.assemblyCode.push(`  LI -${offset}              ; 加载 ${varName}`);
+        return 'eax'; // LI指令将值加载到eax中
+      }
+      return stackAddr; // 回退到原来的方式
     } else {
       throw new Error(`Undefined variable: ${varName}`);
     }
@@ -307,139 +336,139 @@ export class StatementCodeGenerator {
   private generateBinaryExpression(expression: BinaryExpression): string {
     const left = this.generateExpression(expression.left);
     const right = this.generateExpression(expression.right);
-    const tempVar = this.generateTempVar();
     
     switch (expression.operator) {
       case '+':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  add eax, ${right}`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  add eax, ebx          ; 执行加法`);
+        return 'eax'; // 直接返回寄存器
       case '-':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  sub eax, ${right}`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  sub eax, ebx          ; 执行减法`);
+        return 'eax';
       case '*':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  mov ebx, ${right}`);
-        this.assemblyCode.push(`  imul eax, ebx`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  imul eax, ebx         ; 执行乘法`);
+        return 'eax';
       case '/':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  mov ebx, ${right}`);
-        this.assemblyCode.push(`  idiv ebx`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  idiv ebx              ; 执行除法`);
+        return 'eax';
       case '**':
         // 指数运算需要特殊处理
-        this.assemblyCode.push(`  ; Power operation: ${left} ** ${right}`);
-        this.assemblyCode.push(`  mov [${tempVar}], 1  ; result = 1`);
-        break;
+        this.assemblyCode.push(`  ; Power operation`);
+        this.assemblyCode.push(`  mov eax, 1  ; result = 1`);
+        return 'eax';
       case '==':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  cmp eax, ${right}`);
-        this.assemblyCode.push(`  sete al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
+        this.assemblyCode.push(`  sete al               ; 设置相等标志`);
+        return 'eax';
       case '!=':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  cmp eax, ${right}`);
-        this.assemblyCode.push(`  setne al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
+        this.assemblyCode.push(`  setne al              ; 设置不等标志`);
+        return 'eax';
       case '<':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  cmp eax, ${right}`);
-        this.assemblyCode.push(`  setl al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
+        this.assemblyCode.push(`  setl al               ; 设置小于标志`);
+        return 'eax';
       case '<=':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  cmp eax, ${right}`);
-        this.assemblyCode.push(`  setle al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
+        this.assemblyCode.push(`  setle al              ; 设置小于等于标志`);
+        return 'eax';
       case '>':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  cmp eax, ${right}`);
-        this.assemblyCode.push(`  setg al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
+        this.assemblyCode.push(`  setg al               ; 设置大于标志`);
+        return 'eax';
       case '>=':
-        this.assemblyCode.push(`  mov eax, ${left}`);
-        this.assemblyCode.push(`  cmp eax, ${right}`);
-        this.assemblyCode.push(`  setge al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+        this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+        this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
+        this.assemblyCode.push(`  setge al              ; 设置大于等于标志`);
+        return 'eax';
       case '&&':
-        this.assemblyCode.push(`  mov eax, ${left}`);
         this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  je ${tempVar}_false`);
+        this.assemblyCode.push(`  je &&_false`);
         this.assemblyCode.push(`  mov eax, ${right}`);
         this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  je ${tempVar}_false`);
-        this.assemblyCode.push(`  mov [${tempVar}], 1`);
-        this.assemblyCode.push(`  jmp ${tempVar}_end`);
-        this.assemblyCode.push(`${tempVar}_false:`);
-        this.assemblyCode.push(`  mov [${tempVar}], 0`);
-        this.assemblyCode.push(`${tempVar}_end:`);
-        break;
+        this.assemblyCode.push(`  je &&_false`);
+        this.assemblyCode.push(`  mov eax, 1`);
+        this.assemblyCode.push(`  jmp &&_end`);
+        this.assemblyCode.push(`&&_false:`);
+        this.assemblyCode.push(`  mov eax, 0`);
+        this.assemblyCode.push(`&&_end:`);
+        return 'eax';
       case '||':
-        this.assemblyCode.push(`  mov eax, ${left}`);
         this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  jne ${tempVar}_true`);
+        this.assemblyCode.push(`  jne ||_true`);
         this.assemblyCode.push(`  mov eax, ${right}`);
         this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  jne ${tempVar}_true`);
-        this.assemblyCode.push(`  mov [${tempVar}], 0`);
-        this.assemblyCode.push(`  jmp ${tempVar}_end`);
-        this.assemblyCode.push(`${tempVar}_true:`);
-        this.assemblyCode.push(`  mov [${tempVar}], 1`);
-        this.assemblyCode.push(`${tempVar}_end:`);
-        break;
+        this.assemblyCode.push(`  jne ||_true`);
+        this.assemblyCode.push(`  mov eax, 0`);
+        this.assemblyCode.push(`  jmp ||_end`);
+        this.assemblyCode.push(`||_true:`);
+        this.assemblyCode.push(`  mov eax, 1`);
+        this.assemblyCode.push(`||_end:`);
+        return 'eax';
       default:
         throw new Error(`Unknown binary operator: ${expression.operator}`);
     }
-    
-    return `[${tempVar}]`;
   }
 
   private generateUnaryExpression(expression: UnaryExpression): string {
     const operand = this.generateExpression(expression.operand);
-    const tempVar = this.generateTempVar();
     
     switch (expression.operator) {
       case '-':
         this.assemblyCode.push(`  mov eax, ${operand}`);
         this.assemblyCode.push(`  neg eax`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        return 'eax';
       case '!':
         this.assemblyCode.push(`  mov eax, ${operand}`);
         this.assemblyCode.push(`  cmp eax, 0`);
         this.assemblyCode.push(`  sete al`);
-        this.assemblyCode.push(`  mov [${tempVar}], eax`);
-        break;
+        return 'eax';
       default:
         throw new Error(`Unknown unary operator: ${expression.operator}`);
     }
-    
-    return `[${tempVar}]`;
   }
 
   private generateFunctionCall(expression: FunctionCall): string {
     const functionName = expression.callee.name;
     
     if (functionName === 'print') {
-      const value = this.generateExpression(expression.arguments[0]!);
-      this.assemblyCode.push(`  ; print(${value})`);
-      this.assemblyCode.push(`  mov eax, 4      ; write system call`);
-      this.assemblyCode.push(`  mov ebx, 1      ; stdout`);
-      this.assemblyCode.push(`  mov ecx, ${value}`);
-      this.assemblyCode.push(`  mov edx, 1      ; length`);
-      this.assemblyCode.push(`  int 0x80        ; interrupt`);
+      // 为每个参数生成push指令
+      for (let i = expression.arguments.length - 1; i >= 0; i--) {
+        this.generateExpression(expression.arguments[i]!);
+        this.assemblyCode.push(`  push eax        ; 参数${i + 1}入栈`);
+      }
+      
+      this.assemblyCode.push(`  ; print(${expression.arguments.length}个参数)`);
+      this.assemblyCode.push(`  PRT             ; 系统调用print`);
+      this.assemblyCode.push(`  add esp, ${expression.arguments.length}      ; 清理栈参数`);
       return '0'; // print函数返回0
     }
     
@@ -451,10 +480,8 @@ export class StatementCodeGenerator {
     
     // 生成函数调用
     this.assemblyCode.push(`  call function_${functionName}`);
-    const tempVar = this.generateTempVar();
-    this.assemblyCode.push(`  mov [${tempVar}], eax`);
-    
-    return `[${tempVar}]`;
+    // 函数返回值已经在eax中，直接返回
+    return 'eax';
   }
 
   private generateTempVar(): string {
@@ -472,7 +499,11 @@ export class StatementCodeGenerator {
       const right = this.generateExpression(binaryExpr.right);
       
       this.assemblyCode.push(`  mov eax, ${left}`);
-      this.assemblyCode.push(`  cmp eax, ${right}`);
+      this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
+      this.assemblyCode.push(`  mov eax, ${right}`);
+      this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+      this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
+      this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
       
       switch (binaryExpr.operator) {
         case '>':
@@ -515,7 +546,23 @@ export class StatementCodeGenerator {
     this.labelCounter = 0;
     this.variables.clear();
     this.functions.clear();
+    this.stackOffset = 0;
     this.setupBuiltinFunctions();
+  }
+
+  private countVariables(program: Program): number {
+    let count = 0;
+    for (const statement of program.statements) {
+      if (statement.type === 'VariableDeclaration') {
+        count++;
+      } else if (statement.type === 'AssignmentStatement') {
+        const assignment = statement as AssignmentStatement;
+        if (!this.variables.has(assignment.target.name)) {
+          count++;
+        }
+      }
+    }
+    return count;
   }
 }
 

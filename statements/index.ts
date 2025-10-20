@@ -24,6 +24,9 @@ import type {
   EmptyStatement
 } from './ast';
 
+// 在文件顶部补充导入代码生成器
+import { StatementCodeGenerator } from './separated';
+
 export class StatementInterpreter {
   private variables: Map<string, any> = new Map();
   private functions: Map<string, FunctionDeclaration> = new Map();
@@ -391,6 +394,82 @@ export class StatementInterpreter {
   }
 }
 
+// 生成 step3 风格的汇编并写入 statements/assemble.txt
+async function generateAssembleFile(source: string): Promise<void> {
+  // 解析得到 AST
+  const parser = new StatementParser(source);
+  const parseResult = parser.parse();
+  if (parseResult.errors && parseResult.errors.length > 0) {
+    // 解析失败则不生成
+    return;
+  }
+  const program = parseResult.ast as any as Program;
+
+  // 代码生成
+  const generator = new StatementCodeGenerator();
+  const gen = generator.generate(program);
+  const asm = gen.code || '';
+
+  // 按 step3 规则转换：
+  // 1) 收集标签 -> 索引（索引为下一条指令在数组中的位置）
+  // 2) 指令行中过滤段声明/空行；
+  // 3) 将跳转/调用目标中的标签替换为对应索引；
+  // 4) 在首条指令末尾追加该位置对应的标签备注；
+
+  const lines = asm.split('\n');
+  const isDirective = (s: string) => s.startsWith('.data') || s.startsWith('.text') || s.startsWith('.global');
+  const isPureComment = (s: string) => s.trim().startsWith(';');
+
+  const rawCode: string[] = [];
+  const labelToIndex = new Map<string, number>();
+
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    if (isDirective(trimmed)) continue;
+    if (isPureComment(trimmed)) continue;
+    if (trimmed.endsWith(':')) {
+      const label = trimmed.slice(0, -1).trim();
+      labelToIndex.set(label, rawCode.length);
+      continue;
+    }
+    rawCode.push(trimmed);
+  }
+
+  // 标签备注附加
+  const indexToLabels = new Map<number, string[]>();
+  for (const [label, idx] of labelToIndex.entries()) {
+    if (!indexToLabels.has(idx)) indexToLabels.set(idx, []);
+    indexToLabels.get(idx)!.push(label);
+  }
+
+  // 替换目标
+  const jmpRegex = /^(call|jmp|je|jne|jl|jle|jg|jge)\s+([^;\s]+)(.*)$/;
+  const replaced = rawCode.map((instr, i) => {
+    const m = instr.match(jmpRegex);
+    let out = instr;
+    if (m) {
+      const op = m[1] ?? '';
+      const targetRaw = m[2] ?? '';
+      const rest = m[3] ?? '';
+      if (!/^\d+$/.test(targetRaw)) {
+        const idx = labelToIndex.get(targetRaw.trim());
+        if (idx !== undefined) {
+          out = `${op} ${idx}${rest}`.trim();
+        }
+      }
+    }
+    const labels = indexToLabels.get(i);
+    if (labels && labels.length > 0) {
+      out = `${out} ; ${labels.join(', ')}`;
+    }
+    return out;
+  });
+
+  const formatted = replaced.map((instr, i) => `[${i}]: ${instr}`).join('\n') + '\n';
+  await Bun.write('statements/assemble.txt', formatted);
+}
+
 // 主函数
 function main(): void {
   console.log("Statement Interpreter started! Type 'exit' to quit.");
@@ -398,7 +477,7 @@ function main(): void {
   
   process.stdin.setEncoding('utf8');
   
-  process.stdin.on('data', (data) => {
+  process.stdin.on('data', async (data) => {
     const input = data.toString().trim();
     
     // 检查是否要退出
@@ -417,6 +496,10 @@ function main(): void {
     try {
       const interpreter = new StatementInterpreter();
       const result = interpreter.interpret(input);
+      
+      // 生成 assemble.txt（step3 风格）
+      await generateAssembleFile(input);
+      console.log("Assemble written to statements/assemble.txt");
       
       if (result.errors.length > 0) {
         console.log("Errors:");

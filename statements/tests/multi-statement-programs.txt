@@ -1,0 +1,45 @@
+# 多语句程序测试用例
+# 这些测试用例包含多个语句，需要一起运行
+
+## 简单程序1
+int x = 5;
+print(x);
+
+## 简单程序2
+int a = 10;
+int b = 20;
+print(a + b);
+
+## 条件程序
+int score = 85;
+if (score > 80) { print(1); } else { print(0); }
+
+## 循环程序
+int count = 0;
+while (count < 3) { count = count + 1; }
+print(count);
+
+## 复杂程序
+int x = 5;
+int y = 10;
+int z = x * y;
+print(z);
+
+## 函数调用程序
+print(42);
+print(1 + 2 + 3);
+
+## 表达式程序
+int result = (1 + 2) * (3 + 4);
+print(result);
+
+## 比较程序
+int a = 5;
+int b = 3;
+print(a > b);
+
+## 逻辑程序
+int x = 1;
+int y = 0;
+print(x && y);
+

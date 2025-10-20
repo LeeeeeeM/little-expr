@@ -1,0 +1,37 @@
+# 独立语句测试用例
+# 每个语句都可以独立运行
+
+## 基本变量声明
+int x = 5;
+int y = 10;
+int z = 15;
+
+## 变量赋值
+int a = 0;
+int b = 5;
+int c = b + 1;
+
+## 表达式计算
+int result = 2 + 3;
+int product = 4 * 5;
+int power = 2 ** 3;
+
+## 函数调用
+print(42);
+print(1 + 2);
+
+## 条件语句
+if (5 > 3) { print(1); }
+if (3 > 5) { print(2); } else { print(3); }
+
+## 循环语句
+int i = 0;
+int j = 0;
+while (j < 2) { j = j + 1; }
+print(j);
+
+## 复杂表达式
+int complex = (1 + 2) * (3 + 4);
+int negative = -5;
+int comparison = 5 == 5;
+int logical = 1 && 0;

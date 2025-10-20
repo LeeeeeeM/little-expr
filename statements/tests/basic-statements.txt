@@ -1,0 +1,26 @@
+# 基本语句测试用例 - 独立语句格式
+
+# 表达式语句
+x = 5;
+y = x + 3;
+z = x * y;
+
+# 变量声明
+int a;
+int b = 10;
+int c = a + b;
+
+# 函数调用
+print(x);
+print(x + y);
+
+# 空语句
+;
+
+# 复杂表达式
+int w = 2;
+int result = (x + y) * (z - w);
+int power = 2 ** 3 ** 2;
+int negative = -x;
+int comparison = x == y;
+int logical = x > 0 && y < 10;

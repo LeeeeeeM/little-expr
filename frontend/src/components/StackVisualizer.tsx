@@ -164,7 +164,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">🎯 栈式优先级爬坡可视化</h2>
+        <h2 className="text-lg font-semibold text-gray-900">🎯 栈式优先级爬升可视化</h2>
         <div className="flex items-center space-x-4">
           <div className="text-sm text-gray-600">
             步骤: {currentStep} / {steps.length}

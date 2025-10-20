@@ -1,4 +1,4 @@
-// 栈式优先级爬坡解析器 - 浏览器版本
+// 栈式优先级爬升解析器 - 浏览器版本
 // 基于 stack-based-precedence.ts 实现，支持可视化步骤
 
 export interface StackToken {

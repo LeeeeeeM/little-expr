@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <h1 className="text-2xl font-bold text-gray-900">
-          🎯 栈式优先级爬坡可视化
+          🎯 栈式优先级爬升可视化
           </h1>
           
           <div className="flex items-center space-x-4">

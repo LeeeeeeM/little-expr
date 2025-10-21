@@ -324,6 +324,7 @@ export class StatementCodeGenerator {
     } else {
       this.assemblyCode.push(`  mov eax, 0              ; 默认返回值0`);
     }
+    this.assemblyCode.push(`  mov esp, ebp             ; 恢复栈指针`);
     this.assemblyCode.push(`  pop ebp                  ; 恢复调用者BP`);
     this.assemblyCode.push(`  ret                      ; 返回调用者`);
   }
@@ -571,13 +572,16 @@ export class StatementCodeGenerator {
   private generateConditionalJump(condition: Expression, falseLabel: string): void {
     if (condition.type === 'BinaryExpression') {
       const binaryExpr = condition as BinaryExpression;
-      const left = this.generateExpression(binaryExpr.left);
-      const right = this.generateExpression(binaryExpr.right);
       
-      this.assemblyCode.push(`  mov eax, ${left}`);
+      // 生成左操作数，结果在eax
+      this.generateExpression(binaryExpr.left);
       this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
-      this.assemblyCode.push(`  mov eax, ${right}`);
+      
+      // 生成右操作数，结果在eax
+      this.generateExpression(binaryExpr.right);
       this.assemblyCode.push(`  mov ebx, eax          ; 右操作数到ebx`);
+      
+      // 从栈恢复左操作数到eax
       this.assemblyCode.push(`  pop eax               ; 从栈恢复左操作数`);
       this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
       

@@ -21,10 +21,8 @@ function_change:
   mov eax, 0         ; 加载常量 0
   SI -3              ; 初始化 e
   LI +2              ; 加载参数 a
-  LI +3              ; 加载参数 b
-  mov eax, eax
   push eax              ; 保存左操作数到栈
-  mov eax, eax
+  LI +3              ; 加载参数 b
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   cmp eax, ebx          ; 比较操作数
@@ -72,6 +70,7 @@ end_1:
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   add eax, ebx          ; 执行加法
+  mov esp, ebp             ; 恢复栈指针
   pop ebp                  ; 恢复调用者BP
   ret                      ; 返回调用者
 
@@ -87,19 +86,15 @@ function_main:
   SI -3              ; 初始化 maxCount
 loop_2:
   LI -2              ; 加载局部变量 count
-  LI -3              ; 加载局部变量 maxCount
-  mov eax, eax
   push eax              ; 保存左操作数到栈
-  mov eax, eax
+  LI -3              ; 加载局部变量 maxCount
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   cmp eax, ebx          ; 比较操作数
   jg end_3
   LI -2              ; 加载局部变量 count
-  mov eax, 5         ; 加载常量 5
-  mov eax, eax
   push eax              ; 保存左操作数到栈
-  mov eax, eax
+  mov eax, 5         ; 加载常量 5
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   cmp eax, ebx          ; 比较操作数
@@ -161,5 +156,6 @@ end_3:
   add esp, 1      ; 清理栈参数
   ; Expression result in eax
   mov eax, 0         ; 加载常量 0
+  mov esp, ebp             ; 恢复栈指针
   pop ebp                  ; 恢复调用者BP
   ret                      ; 返回调用者

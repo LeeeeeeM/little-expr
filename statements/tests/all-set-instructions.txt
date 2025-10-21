@@ -1,0 +1,21 @@
+# 测试所有 set 指令
+
+int a = 5 == 3;
+int b = 3 != 5;
+int c = 2 > 5;
+int d = 3 <= 5;
+int e = 7 <= 5;
+int f = 6 >= 5;
+
+int e1 = a || b;
+
+int e2 = c && d;
+
+print(a);
+print(b);
+print(c);
+print(d);
+print(e);
+print(f);
+print(e1);
+print(e2);

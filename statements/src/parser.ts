@@ -241,7 +241,24 @@ export class StatementParser {
     
     let init: VariableDeclaration | AssignmentStatement | ExpressionStatement | undefined;
     if (this.lexer.getCurrentToken()?.type === TokenType.INT) {
-      init = this.parseVariableDeclaration();
+      const dataType = this.parseDataType();
+      const name = this.parseIdentifierName();
+      
+      let initializer: Expression | undefined;
+      if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
+        this.lexer.advance();
+        initializer = this.parseExpression();
+      }
+
+      // 添加到当前作用域
+      this.context.currentScope.variables.set(name, {
+        name,
+        type: dataType,
+        value: undefined, // 暂时不设置值，让代码生成器处理
+        isInitialized: !!initializer
+      });
+
+      init = ASTFactory.createVariableDeclaration(name, dataType, initializer);
     } else if (this.lexer.getCurrentToken()?.type === TokenType.IDENTIFIER) {
       init = this.parseAssignmentStatement();
     } else {
@@ -258,7 +275,8 @@ export class StatementParser {
     
     let update: ExpressionStatement | undefined;
     if (this.lexer.getCurrentToken()?.type !== TokenType.RIGHTPAREN) {
-      update = this.parseExpressionStatement();
+      const expression = this.parseExpression();
+      update = ASTFactory.createExpressionStatement(expression);
     }
     this.expect(TokenType.RIGHTPAREN);
     

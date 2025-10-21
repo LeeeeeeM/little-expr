@@ -155,6 +155,24 @@ export class VirtualMachine {
       case 'je':
         this.executeJe(parts);
         break;
+      case 'setge':
+        this.executeSetge(parts);
+        break;
+      case 'sete':
+        this.executeSete(parts);
+        break;
+      case 'setne':
+        this.executeSetne(parts);
+        break;
+      case 'setl':
+        this.executeSetl(parts);
+        break;
+      case 'setle':
+        this.executeSetle(parts);
+        break;
+      case 'setg':
+        this.executeSetg(parts);
+        break;
       default:
         console.warn(`未知指令: ${opcode}`);
     }
@@ -444,6 +462,42 @@ export class VirtualMachine {
     if (this.state.flags.equal) {
       this.state.pc = (parseInt(parts[1] || '0') || 0) - 1;
     }
+  }
+
+  // setge - 设置大于等于标志 (greater than or equal)，默认存储到 eax
+  private executeSetge(parts: string[]): void {
+    const value = (!this.state.flags.less || this.state.flags.equal) ? 1 : 0;
+    this.state.eax = value;
+  }
+
+  // sete - 设置相等标志 (equal)，默认存储到 eax
+  private executeSete(parts: string[]): void {
+    const value = this.state.flags.equal ? 1 : 0;
+    this.state.eax = value;
+  }
+
+  // setne - 设置不等标志 (not equal)，默认存储到 eax
+  private executeSetne(parts: string[]): void {
+    const value = !this.state.flags.equal ? 1 : 0;
+    this.state.eax = value;
+  }
+
+  // setl - 设置小于标志 (less than)，默认存储到 eax
+  private executeSetl(parts: string[]): void {
+    const value = this.state.flags.less ? 1 : 0;
+    this.state.eax = value;
+  }
+
+  // setle - 设置小于等于标志 (less than or equal)，默认存储到 eax
+  private executeSetle(parts: string[]): void {
+    const value = (this.state.flags.less || this.state.flags.equal) ? 1 : 0;
+    this.state.eax = value;
+  }
+
+  // setg - 设置大于标志 (greater than)，默认存储到 eax
+  private executeSetg(parts: string[]): void {
+    const value = (!this.state.flags.less && !this.state.flags.equal) ? 1 : 0;
+    this.state.eax = value;
   }
 
   // 获取虚拟机状态（用于调试）

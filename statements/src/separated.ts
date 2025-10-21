@@ -2,8 +2,7 @@
 // 解析 + AST生成 + 代码生成
 
 import { StatementParser } from './parser';
-import { StatementLexer } from './lexer';
-import type { Program, Statement, Expression, ParseResult, CodeGenResult, ParseError } from './types';
+import type { Program, Statement, Expression, CodeGenResult } from './types';
 import type { 
   NumberLiteral, 
   Identifier, 
@@ -311,14 +310,13 @@ export class StatementCodeGenerator {
     
     // 生成条件检查
     if (statement.condition) {
-      const condition = this.generateExpression(statement.condition);
-      this.assemblyCode.push(`  mov eax, ${condition}`);
-      this.assemblyCode.push(`  cmp eax, 0`);
-      this.assemblyCode.push(`  je ${endLabel}`);
+      this.generateConditionalJump(statement.condition, endLabel);
     }
     
     // 生成循环体
     this.generateStatement(statement.body);
+    
+    this.assemblyCode.push(`continue_target:`); // 添加 continue_target 标签
     
     // 生成更新
     if (statement.update) {
@@ -327,6 +325,7 @@ export class StatementCodeGenerator {
     
     this.assemblyCode.push(`  jmp ${loopLabel}`);
     this.assemblyCode.push(`${endLabel}:`);
+    this.assemblyCode.push(`break_target:`); // 添加 break_target 标签
   }
 
   private generateReturnStatement(statement: ReturnStatement): void {
@@ -462,6 +461,23 @@ export class StatementCodeGenerator {
   }
 
   private generateBinaryExpression(expression: BinaryExpression): string {
+    // 特殊处理赋值操作符
+    if (expression.operator === '=') {
+      // 赋值：先计算右侧，然后存储到左侧变量
+      this.generateExpression(expression.right); // 结果在eax
+      if (expression.left.type === 'Identifier') {
+        const target = (expression.left as Identifier).name;
+        if (!this.variables.has(target)) {
+          throw new Error(`Undefined variable: ${target}`);
+        }
+        const offset = this.variables.get(target)!;
+        // 提取数字部分，处理 [ebp-1] 格式
+        const offsetValue = offset.match(/\[ebp-(\d+)\]/)?.[1] || offset;
+        this.assemblyCode.push(`  SI -${offsetValue}             ; 存储到变量 ${target}`);
+      }
+      return 'eax';
+    }
+    
     // 生成左操作数，结果在eax
     this.generateExpression(expression.left);
     this.assemblyCode.push(`  push eax              ; 保存左操作数到栈`);
@@ -498,27 +514,27 @@ export class StatementCodeGenerator {
         return 'eax';
       case '==':
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
-        this.assemblyCode.push(`  sete al               ; 设置相等标志`);
+        this.assemblyCode.push(`  sete                  ; 设置相等标志`);
         return 'eax';
       case '!=':
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
-        this.assemblyCode.push(`  setne al              ; 设置不等标志`);
+        this.assemblyCode.push(`  setne                 ; 设置不等标志`);
         return 'eax';
       case '<':
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
-        this.assemblyCode.push(`  setl al               ; 设置小于标志`);
+        this.assemblyCode.push(`  setl                  ; 设置小于标志`);
         return 'eax';
       case '<=':
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
-        this.assemblyCode.push(`  setle al              ; 设置小于等于标志`);
+        this.assemblyCode.push(`  setle                 ; 设置小于等于标志`);
         return 'eax';
       case '>':
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
-        this.assemblyCode.push(`  setg al               ; 设置大于标志`);
+        this.assemblyCode.push(`  setg                  ; 设置大于标志`);
         return 'eax';
       case '>=':
         this.assemblyCode.push(`  cmp eax, ebx          ; 比较操作数`);
-        this.assemblyCode.push(`  setge al              ; 设置大于等于标志`);
+        this.assemblyCode.push(`  setge                 ; 设置大于等于标志`);
         return 'eax';
       case '&&':
         this.assemblyCode.push(`  cmp eax, 0            ; 检查左操作数`);
@@ -559,7 +575,7 @@ export class StatementCodeGenerator {
       case '!':
         this.assemblyCode.push(`  mov eax, ${operand}`);
         this.assemblyCode.push(`  cmp eax, 0`);
-        this.assemblyCode.push(`  sete al`);
+        this.assemblyCode.push(`  sete`);
         return 'eax';
       default:
         throw new Error(`Unknown unary operator: ${expression.operator}`);

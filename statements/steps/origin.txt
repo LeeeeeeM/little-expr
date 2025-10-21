@@ -1,0 +1,39 @@
+# Main函数测试用例
+
+## Main函数 - 复杂嵌套程序
+
+int change(int a, int b) {
+  int c = 5;
+  int d = 2;
+  int e = 0;
+  if (a >= b) {
+    e = a * b + c * d
+  } else {
+    e = a * b - c * d;
+  }
+  
+  return e + 1;
+}
+
+
+int main() {
+  int sum = 0;
+  int count = 1;
+  int maxCount = 10;
+
+  while (count <= maxCount) {
+      if (count > 5) {
+          sum = sum + count * 2;
+          print(sum);
+      } else {
+          sum = sum + count;
+          print(sum);
+      }
+      count = count + 1;
+  }
+
+  sum = change(sum, maxCount)
+
+  print(sum);
+  return 0;
+}

@@ -32,6 +32,7 @@
     "test:statements-independent": "bun run statements/unified-test-runner.ts independent-statements.txt single",
     "test:statements-multi": "bun run statements/unified-test-runner.ts multi-statement-programs.txt multi",
     "test:statements-nested": "bun run statements/unified-test-runner.ts complex-nested-program.txt multi",
+    "steps": "GENERATE_STEPS=true bun run statements/index.ts statements/steps/origin.txt",
     "frontend": "cd frontend && bun run dev",
     "dev": "bun run frontend"
   },

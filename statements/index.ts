@@ -394,10 +394,113 @@ export class StatementInterpreter {
   }
 }
 
+// 生成四个步骤的汇编文件
+async function generateStepFiles(source: string): Promise<void> {
+  // 过滤掉注释行（以 # 开头的行）
+  const filteredSource = source.split('\n')
+    .filter(line => !line.trim().startsWith('#'))
+    .join('\n');
+  
+  // 注意：不重新写入 origin.txt，保持原文件不变
+  
+  // 解析得到 AST
+  const parser = new StatementParser(filteredSource);
+  const parseResult = parser.parse();
+  if (parseResult.errors && parseResult.errors.length > 0) {
+    // 解析失败则不生成后续步骤
+    return;
+  }
+  const program = parseResult.ast as any as Program;
+
+  // Step 1: 只包含 AST 结构
+  const step0Content = `=== AST结构 ===
+${JSON.stringify(program, null, 2)}`;
+  await Bun.write('statements/steps/step0.txt', step0Content);
+
+  // 代码生成
+  const generator = new StatementCodeGenerator();
+  const gen = generator.generate(program);
+  const asm = gen.code || '';
+
+  // Step 2: 只包含原始汇编代码
+  const step1Content = `=== 生成的汇编代码 ===
+${asm}`;
+  await Bun.write('statements/steps/step1.txt', step1Content);
+
+  // Step 3: 索引化 + 标签备注
+  const lines = asm.split('\n');
+  const isDirective = (s: string) => s.startsWith('.data') || s.startsWith('.text') || s.startsWith('.global');
+  const isPureComment = (s: string) => s.trim().startsWith(';');
+
+  const rawCode: string[] = [];
+  const labelToIndex = new Map<string, number>();
+
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    if (isDirective(trimmed)) continue;
+    if (isPureComment(trimmed)) continue;
+    if (trimmed.endsWith(':')) {
+      const label = trimmed.slice(0, -1).trim();
+      labelToIndex.set(label, rawCode.length);
+      continue;
+    }
+    rawCode.push(trimmed);
+  }
+
+  // 标签备注附加
+  const indexToLabels = new Map<number, string[]>();
+  for (const [label, idx] of labelToIndex.entries()) {
+    if (!indexToLabels.has(idx)) indexToLabels.set(idx, []);
+    indexToLabels.get(idx)!.push(label);
+  }
+
+  const step2Content = rawCode.map((instr, i) => {
+    let out = instr;
+    const labels = indexToLabels.get(i);
+    if (labels && labels.length > 0) {
+      out = `${out} ; ${labels.join(', ')}`;
+    }
+    return `[${i}]: ${out}`;
+  }).join('\n') + '\n';
+  await Bun.write('statements/steps/step2.txt', step2Content);
+
+  // Step 4: 标签替换为数值索引
+  const jmpRegex = /^(call|jmp|je|jne|jl|jle|jg|jge)\s+([^;\s]+)(.*)$/;
+  const replaced = rawCode.map((instr, i) => {
+    const m = instr.match(jmpRegex);
+    let out = instr;
+    if (m) {
+      const op = m[1] ?? '';
+      const targetRaw = m[2] ?? '';
+      const rest = m[3] ?? '';
+      if (!/^\d+$/.test(targetRaw)) {
+        const idx = labelToIndex.get(targetRaw.trim());
+        if (idx !== undefined) {
+          out = `${op} ${idx}${rest}`.trim();
+        }
+      }
+    }
+    const labels = indexToLabels.get(i);
+    if (labels && labels.length > 0) {
+      out = `${out} ; ${labels.join(', ')}`;
+    }
+    return out;
+  });
+
+  const step3Content = replaced.map((instr, i) => `[${i}]: ${instr}`).join('\n') + '\n';
+  await Bun.write('statements/steps/step3.txt', step3Content);
+}
+
 // 生成 step3 风格的汇编并写入 statements/assemble.txt
 async function generateAssembleFile(source: string): Promise<void> {
+  // 过滤掉注释行（以 # 开头的行）
+  const filteredSource = source.split('\n')
+    .filter(line => !line.trim().startsWith('#'))
+    .join('\n');
+  
   // 解析得到 AST
-  const parser = new StatementParser(source);
+  const parser = new StatementParser(filteredSource);
   const parseResult = parser.parse();
   if (parseResult.errors && parseResult.errors.length > 0) {
     // 解析失败则不生成
@@ -409,6 +512,13 @@ async function generateAssembleFile(source: string): Promise<void> {
   const generator = new StatementCodeGenerator();
   const gen = generator.generate(program);
   const asm = gen.code || '';
+
+  // 开关：ASM_OUTPUT=raw 则输出原始汇编（含段声明/标签等）；默认输出 step3 风格
+  const outputMode = process.env.ASM_OUTPUT || 'step3';
+  if (outputMode === 'raw') {
+    await Bun.write('statements/assemble.txt', asm + '\n');
+    return;
+  }
 
   // 按 step3 规则转换：
   // 1) 收集标签 -> 索引（索引为下一条指令在数组中的位置）
@@ -471,69 +581,77 @@ async function generateAssembleFile(source: string): Promise<void> {
 }
 
 // 主函数
-function main(): void {
-  console.log("Statement Interpreter started! Type 'exit' to quit.");
-  console.log("Input your program:");
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
   
-  process.stdin.setEncoding('utf8');
+  if (args.length === 0) {
+    console.log("Usage: bun run statements/index.ts <file_path>");
+    console.log("Example: bun run statements/index.ts statements/tests/main-test.txt");
+    process.exit(1);
+  }
   
-  process.stdin.on('data', async (data) => {
-    const input = data.toString().trim();
+  const filePath = args[0]!;
+  
+  try {
+    // 读取文件内容
+    const fileContent = await Bun.file(filePath).text();
     
-    // 检查是否要退出
-    if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
-      console.log("Goodbye! 👋");
-      process.exit(0);
-    }
+    // 过滤掉注释行（以 # 开头的行）
+    const filteredInput = fileContent.split('\n')
+      .filter(line => !line.trim().startsWith('#'))
+      .join('\n');
     
-    if (input === '') {
-      console.log("Please enter a program:");
-      return;
-    }
+    const interpreter = new StatementInterpreter();
+    const result = interpreter.interpret(filteredInput);
     
-    console.log();
+    // 检查是否需要生成步骤文件
+    const generateSteps = process.env.GENERATE_STEPS === 'true';
     
-    try {
-      const interpreter = new StatementInterpreter();
-      const result = interpreter.interpret(input);
-      
+    if (generateSteps) {
+      // 生成三个步骤文件
+      await generateStepFiles(filteredInput);
+      console.log("Step files written to statements/steps/");
+      console.log("  - origin.txt: 原始源代码");
+      console.log("  - step0.txt: AST 结构");
+      console.log("  - step1.txt: 原始汇编代码");
+      console.log("  - step2.txt: 索引化 + 标签备注");
+      console.log("  - step3.txt: 标签替换为数值索引");
+    } else {
       // 生成 assemble.txt（step3 风格）
-      await generateAssembleFile(input);
+      await generateAssembleFile(filteredInput);
       console.log("Assemble written to statements/assemble.txt");
-      
-      if (result.errors.length > 0) {
-        console.log("Errors:");
-        result.errors.forEach(error => {
-          console.log(`  ${error.message} at line ${error.line}, column ${error.column}`);
-        });
-      } else {
-        console.log("Execution completed successfully!");
-        
-        if (result.output.length > 0) {
-          console.log("Output:");
-          result.output.forEach(line => console.log(line));
-        }
-        
-        if (result.value !== undefined) {
-          console.log(`Return value: ${result.value}`);
-        }
-        
-        // 显示变量状态
-        const variables = interpreter.getVariables();
-        if (variables.size > 0) {
-          console.log("Variables:");
-          variables.forEach((value, name) => {
-            console.log(`  ${name} = ${value}`);
-          });
-        }
-      }
-    } catch (error) {
-      console.log("Error:", error);
     }
     
-    console.log();
-    console.log("Input your program (or 'exit' to quit):");
-  });
+    if (result.errors.length > 0) {
+      console.log("Errors:");
+      result.errors.forEach(error => {
+        console.log(`  ${error.message} at line ${error.line}, column ${error.column}`);
+      });
+    } else {
+      console.log("Execution completed successfully!");
+      
+      if (result.output.length > 0) {
+        console.log("Output:");
+        result.output.forEach(line => console.log(line));
+      }
+      
+      if (result.value !== undefined) {
+        console.log(`Return value: ${result.value}`);
+      }
+      
+      // 显示变量状态
+      const variables = interpreter.getVariables();
+      if (variables.size > 0) {
+        console.log("Variables:");
+        variables.forEach((value, name) => {
+          console.log(`  ${name} = ${value}`);
+        });
+      }
+    }
+  } catch (error) {
+    console.log("Error:", error);
+    process.exit(1);
+  }
 }
 
 // 运行主程序

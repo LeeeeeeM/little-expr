@@ -1,0 +1,70 @@
+# 测试 if-else 中的复杂逻辑操作符
+int a = 1;
+int b = 0;
+int c = 1;
+int d = 0;
+
+# 基础逻辑测试
+if (a && b) {
+  print(100);
+} else {
+  print(200);
+}
+
+if (a || b) {
+  print(300);
+} else {
+  print(400);
+}
+
+# 复杂嵌套逻辑测试
+if ((a && c) || (b && d)) {
+  print(500);
+} else {
+  print(600);
+}
+
+if ((a || b) && (c || d)) {
+  print(700);
+} else {
+  print(800);
+}
+
+# 多层嵌套逻辑测试
+if ((a && b) || (c && d) || (a && c)) {
+  print(900);
+} else {
+  print(1000);
+}
+
+if ((b || c) && (a || d) && (c || a)) {
+  print(1100);
+} else {
+  print(1200);
+}
+
+# 更复杂的逻辑组合
+if ((a && c) && (b || a) && (c || b)) {
+  print(1300);
+} else {
+  print(1400);
+}
+
+if ((a || b || c) && (b && c && d)) {
+  print(1500);
+} else {
+  print(1600);
+}
+
+# 混合逻辑测试
+if ((a && b) || (c && d) || (a && c) || (b && d)) {
+  print(1700);
+} else {
+  print(1800);
+}
+
+if ((a || b) && (c || d) && (a || c) && (b || d)) {
+  print(1900);
+} else {
+  print(2000);
+}

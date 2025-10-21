@@ -570,26 +570,32 @@ export class StatementCodeGenerator {
         this.assemblyCode.push(`  setge                 ; 设置大于等于标志`);
         return 'eax';
       case '&&':
+        // 逻辑与：如果两个操作数都不为0，结果为1，否则为0
+        // 将非零值转换为1，然后相乘
         this.assemblyCode.push(`  cmp eax, 0            ; 检查左操作数`);
-        this.assemblyCode.push(`  je &&_false           ; 如果为0则跳转`);
-        this.assemblyCode.push(`  cmp ebx, 0            ; 检查右操作数`);
-        this.assemblyCode.push(`  je &&_false           ; 如果为0则跳转`);
-        this.assemblyCode.push(`  mov eax, 1            ; 都为真，结果为1`);
-        this.assemblyCode.push(`  jmp &&_end            ; 跳转到结束`);
-        this.assemblyCode.push(`&&_false:`);
-        this.assemblyCode.push(`  mov eax, 0            ; 结果为0`);
-        this.assemblyCode.push(`&&_end:`);
+        this.assemblyCode.push(`  setne                 ; 设置不等于标志`);
+        this.assemblyCode.push(`  push eax              ; 保存左操作数结果`);
+        this.assemblyCode.push(`  mov eax, ebx          ; 恢复右操作数`);
+        this.assemblyCode.push(`  cmp eax, 0            ; 检查右操作数`);
+        this.assemblyCode.push(`  setne                 ; 设置不等于标志`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 保存右操作数结果`);
+        this.assemblyCode.push(`  pop eax               ; 恢复左操作数结果`);
+        this.assemblyCode.push(`  imul eax, ebx        ; 逻辑与操作（1*1=1, 1*0=0, 0*1=0, 0*0=0）`);
         return 'eax';
       case '||':
+        // 逻辑或：如果至少一个操作数不为0，结果为1，否则为0
+        // 将非零值转换为1，然后相加，如果结果>=1则为1，否则为0
         this.assemblyCode.push(`  cmp eax, 0            ; 检查左操作数`);
-        this.assemblyCode.push(`  jne ||_true           ; 如果不为0则跳转`);
-        this.assemblyCode.push(`  cmp ebx, 0            ; 检查右操作数`);
-        this.assemblyCode.push(`  jne ||_true           ; 如果不为0则跳转`);
-        this.assemblyCode.push(`  mov eax, 0            ; 都为假，结果为0`);
-        this.assemblyCode.push(`  jmp ||_end            ; 跳转到结束`);
-        this.assemblyCode.push(`||_true:`);
-        this.assemblyCode.push(`  mov eax, 1            ; 结果为1`);
-        this.assemblyCode.push(`||_end:`);
+        this.assemblyCode.push(`  setne                 ; 设置不等于标志`);
+        this.assemblyCode.push(`  push eax              ; 保存左操作数结果`);
+        this.assemblyCode.push(`  mov eax, ebx          ; 恢复右操作数`);
+        this.assemblyCode.push(`  cmp eax, 0            ; 检查右操作数`);
+        this.assemblyCode.push(`  setne                 ; 设置不等于标志`);
+        this.assemblyCode.push(`  mov ebx, eax          ; 保存右操作数结果`);
+        this.assemblyCode.push(`  pop eax               ; 恢复左操作数结果`);
+        this.assemblyCode.push(`  add eax, ebx          ; 逻辑或操作（1+1=2, 1+0=1, 0+1=1, 0+0=0）`);
+        this.assemblyCode.push(`  cmp eax, 1            ; 检查结果是否>=1`);
+        this.assemblyCode.push(`  setge                 ; 设置大于等于标志`);
         return 'eax';
       default:
         throw new Error(`Unknown binary operator: ${expression.operator}`);

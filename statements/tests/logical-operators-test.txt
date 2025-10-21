@@ -1,0 +1,50 @@
+# 测试逻辑操作符
+int a = 1;
+int b = 0;
+int c = 1;
+
+# 测试 && 操作符
+int result1 = a && b;  # 1 && 0 = 0
+print(result1);
+
+int result2 = a && c;  # 1 && 1 = 1
+print(result2);
+
+# 测试 || 操作符
+int result3 = a || b;  # 1 || 0 = 1
+print(result3);
+
+int result4 = b || b;  # 0 || 0 = 0
+print(result4);
+
+# 测试复杂表达式
+int result5 = (a && c) || b;  # (1 && 1) || 0 = 1
+print(result5);
+
+# 更多复杂测试
+int result6 = a && b && c;  # 1 && 0 && 1 = 0
+print(result6);
+
+int result7 = a || b || c;  # 1 || 0 || 1 = 1
+print(result7);
+
+int result8 = (a && b) || (c && a);  # (1 && 0) || (1 && 1) = 0 || 1 = 1
+print(result8);
+
+int result9 = (a || b) && (c || b);  # (1 || 0) && (1 || 0) = 1 && 1 = 1
+print(result9);
+
+int result10 = (a && c) && (b || a);  # (1 && 1) && (0 || 1) = 1 && 1 = 1
+print(result10);
+
+int result11 = (b && c) || (a && b);  # (0 && 1) || (1 && 0) = 0 || 0 = 0
+print(result11);
+
+int result12 = (a || c) && (b || c);  # (1 || 1) && (0 || 1) = 1 && 1 = 1
+print(result12);
+
+int result13 = (a && b) || (c && b) || (a && c);  # (1 && 0) || (1 && 0) || (1 && 1) = 0 || 0 || 1 = 1
+print(result13);
+
+int result14 = (b || c) && (a || b) && (c || a);  # (0 || 1) && (1 || 0) && (1 || 1) = 1 && 1 && 1 = 1
+print(result14);

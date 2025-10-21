@@ -23,15 +23,100 @@ import type {
   EmptyStatement
 } from './ast';
 
+// 作用域管理器
+class ScopeManager {
+  private scopes: Map<string, number>[] = [new Map()]; // 作用域栈
+  private functionStackOffset = 0; // 函数级变量栈偏移
+  private currentBlockOffset = 0; // 当前块级变量偏移
+  private functionParameters: string[] = []; // 函数参数列表
+  
+  // 进入新作用域
+  enterScope(): void {
+    this.scopes.push(new Map());
+    this.currentBlockOffset = 0; // 重置块级变量偏移
+  }
+  
+  // 退出当前作用域
+  exitScope(): void {
+    if (this.scopes.length > 1) {
+      this.scopes.pop();
+    }
+  }
+  
+  // 设置函数参数
+  setFunctionParameters(parameters: string[]): void {
+    this.functionParameters = parameters;
+  }
+  
+  // 声明函数级变量
+  declareFunctionVariable(name: string): number {
+    const offset = --this.functionStackOffset; // 负数偏移
+    this.scopes[0]!.set(name, offset); // 函数级变量存储在根作用域
+    return offset;
+  }
+  
+  // 声明块级变量
+  declareBlockVariable(name: string): number {
+    // 块级变量应该基于函数级变量的偏移量继续分配
+    const offset = --this.functionStackOffset; // 使用函数栈偏移
+    const currentScope = this.scopes[this.scopes.length - 1]!;
+    currentScope.set(name, offset);
+    return offset;
+  }
+  
+  // 查找变量
+  getVariable(name: string): number | null {
+    // 从内层到外层查找
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const scope = this.scopes[i];
+      if (scope && scope.has(name)) {
+        return scope.get(name)!;
+      }
+    }
+    
+    // 如果都没找到，检查是否是函数参数
+    const paramIndex = this.functionParameters.indexOf(name);
+    if (paramIndex !== -1) {
+      return paramIndex + 2; // 参数从 ebp+2 开始（跳过返回地址）
+    }
+    
+    return null;
+  }
+  
+  // 重置（用于新函数）
+  reset(): void {
+    this.scopes = [new Map()];
+    this.functionStackOffset = 0;
+    this.currentBlockOffset = 0;
+    this.functionParameters = [];
+  }
+  
+  // 获取函数级变量数量
+  getFunctionVariableCount(): number {
+    return Math.abs(this.functionStackOffset);
+  }
+  
+  // 获取块级变量数量
+  getBlockVariableCount(): number {
+    return Math.abs(this.currentBlockOffset);
+  }
+  
+  // 检查是否在块作用域中
+  isInBlock(): boolean {
+    return this.scopes.length > 1;
+  }
+}
+
 export class StatementCodeGenerator {
   private assemblyCode: string[] = [];
   private tempVarCounter = 0;
   private labelCounter = 0;
-  private variables: Map<string, string> = new Map(); // 变量名 -> 栈偏移地址
+  private variables: Map<string, string> = new Map(); // 变量名 -> 栈偏移地址（兼容旧代码）
   private functions: Map<string, FunctionDeclaration> = new Map();
   private stackOffset = 0; // 当前栈偏移
   private continueStack: string[] = []; // continue 标签栈
   private breakStack: string[] = []; // break 标签栈
+  private scopeManager = new ScopeManager(); // 作用域管理器
 
   constructor() {
     this.setupBuiltinFunctions();
@@ -175,34 +260,36 @@ export class StatementCodeGenerator {
     this.generateExpression(statement.value); // Result is in eax
     const target = statement.target.name;
     
-    if (!this.variables.has(target)) {
-      const offset = this.stackOffset + 1; // 从ebp-1开始
-      const stackAddr = `[ebp-${offset}]`;
-      this.variables.set(target, stackAddr);
-      this.stackOffset += 1;
+    // 使用作用域管理器查找变量
+    let offset = this.scopeManager.getVariable(target);
+    if (offset === null) {
+      // 变量未声明，按函数级变量处理
+      offset = this.scopeManager.declareFunctionVariable(target);
     }
     
     // 使用SI指令存储
-    const stackAddr = this.variables.get(target)!;
-    const offset = stackAddr.match(/\[ebp-(\d+)\]/)?.[1];
-    if (offset) {
-      this.assemblyCode.push(`  SI -${offset}              ; 存储到 ${target}`);
-    } else {
-      // 回退到原来的方式
-      this.assemblyCode.push(`  mov ${stackAddr}, eax`);
-    }
+    this.assemblyCode.push(`  SI ${offset}              ; 存储到 ${target}`);
   }
 
   private generateVariableDeclaration(statement: VariableDeclaration): void {
     const varName = statement.name;
-    const offset = this.stackOffset + 1; // 从ebp-1开始
-    const stackAddr = `[ebp-${offset}]`;
+    
+    // 使用作用域管理器声明变量
+    const isInBlock = this.scopeManager.isInBlock();
+    let offset: number;
+    if (isInBlock) {
+      offset = this.scopeManager.declareBlockVariable(varName);
+    } else {
+      offset = this.scopeManager.declareFunctionVariable(varName);
+    }
+    
+    // 兼容旧代码
+    const stackAddr = `[ebp${offset}]`;
     this.variables.set(varName, stackAddr);
-    this.stackOffset += 1; // 每个变量占用1字节偏移
     
     if (statement.initializer) {
       this.generateExpression(statement.initializer); // Result is in eax
-      this.assemblyCode.push(`  SI -${offset}              ; 初始化 ${varName}`);
+      this.assemblyCode.push(`  SI ${offset}              ; 初始化 ${varName}`);
     } else {
       this.assemblyCode.push(`  mov dword ${stackAddr}, 0  ; Initialize to 0`);
     }
@@ -215,24 +302,32 @@ export class StatementCodeGenerator {
     this.assemblyCode.push(`function_${statement.name}:`);
     this.assemblyCode.push(`  push ebp`);
     this.assemblyCode.push(`  mov ebp, esp`);
-    // 为函数建立独立的局部作用域：局部变量应从 ebp-1 开始
+    
+    // 重置作用域管理器
+    this.scopeManager.reset();
+    
+    // 设置函数参数
+    const paramNames = statement.parameters.map(p => p.name);
+    this.scopeManager.setFunctionParameters(paramNames);
+    
+    // 兼容旧代码：处理函数参数
     const prevVariables = this.variables;
     const prevStackOffset = this.stackOffset;
     this.variables = new Map();
     this.stackOffset = 0;
     
-    // 处理函数参数 - 参数在栈上，从ebp+2开始（跳过返回地址1字节和ebp1字节）
-    let paramOffset = 2; // ebp+2是第一个参数
+    // 处理函数参数 - 参数在栈上，从ebp+1开始
+    let paramOffset = 1; // ebp+1是第一个参数
     for (const param of statement.parameters) {
       const stackAddr = `[ebp+${paramOffset}]`;
       this.variables.set(param.name, stackAddr);
       paramOffset += 1; // 每个参数1字节
     }
     
-    // 为局部变量分配栈空间
-    const localVarCount = this.countLocalVariables(statement.body);
-    if (localVarCount > 0) {
-      this.assemblyCode.push(`  sub esp, ${localVarCount}            ; 为${localVarCount}个局部变量分配栈空间`);
+    // 为函数级变量分配栈空间（不包括块级变量）
+    const functionVarCount = this.scopeManager.getFunctionVariableCount();
+    if (functionVarCount > 0) {
+      this.assemblyCode.push(`  sub esp, ${functionVarCount}            ; 为${functionVarCount}个函数级变量分配栈空间`);
     }
     
     // 生成函数体
@@ -439,9 +534,76 @@ export class StatementCodeGenerator {
   }
 
   private generateBlockStatement(statement: BlockStatement): void {
+    // 进入新作用域
+    this.scopeManager.enterScope();
+    
+    // 先计算当前作用域需要多少变量
+    const variableCount = this.countVariablesInScope(statement);
+    if (variableCount > 0) {
+      this.assemblyCode.push(`  sub esp, ${variableCount}            ; 为${variableCount}个块级变量分配栈空间`);
+    }
+    
+    // 生成块内语句
     for (const stmt of statement.statements) {
       this.generateStatement(stmt);
     }
+    
+    // 退出作用域
+    if (variableCount > 0) {
+      this.assemblyCode.push(`  add esp, ${variableCount}            ; 释放块级变量栈空间`);
+    }
+    this.scopeManager.exitScope();
+  }
+
+  // 计算作用域内的变量个数
+  private countVariablesInScope(block: BlockStatement): number {
+    let count = 0;
+    
+    const processStatement = (stmt: Statement): void => {
+      if (stmt.type === 'VariableDeclaration') {
+        count++;
+      } else if (stmt.type === 'BlockStatement') {
+        const nestedBlock = stmt as BlockStatement;
+        for (const nestedStmt of nestedBlock.statements) {
+          processStatement(nestedStmt);
+        }
+      } else if (stmt.type === 'IfStatement') {
+        const ifStmt = stmt as IfStatement;
+        processStatement(ifStmt.thenBranch);
+        if (ifStmt.elseBranch) {
+          processStatement(ifStmt.elseBranch);
+        }
+      } else if (stmt.type === 'WhileStatement') {
+        const whileStmt = stmt as WhileStatement;
+        processStatement(whileStmt.body);
+      } else if (stmt.type === 'ForStatement') {
+        const forStmt = stmt as ForStatement;
+        if (forStmt.init && forStmt.init.type === 'VariableDeclaration') {
+          count++;
+        }
+        processStatement(forStmt.body);
+      }
+    };
+    
+    for (const stmt of block.statements) {
+      processStatement(stmt);
+    }
+    
+    return count;
+  }
+
+  // 计算函数级变量个数（不包括块级变量）
+  private countFunctionVariables(block: BlockStatement): number {
+    let count = 0;
+    
+    for (const stmt of block.statements) {
+      if (stmt.type === 'VariableDeclaration') {
+        count++;
+      }
+      // 不递归处理块级语句，因为块级变量会在块语句中单独处理
+    }
+    
+    return count;
   }
 
   private generateExpression(expression: Expression): string {
@@ -470,6 +632,15 @@ export class StatementCodeGenerator {
 
   private generateIdentifier(expression: Identifier): string {
     const varName = expression.name;
+    
+    // 使用作用域管理器查找变量
+    const offset = this.scopeManager.getVariable(varName);
+    if (offset !== null) {
+      this.assemblyCode.push(`  LI ${offset}              ; 加载变量 ${varName}`);
+      return 'eax'; // LI指令将值加载到eax中
+    }
+    
+    // 兼容旧代码
     if (this.variables.has(varName)) {
       const stackAddr = this.variables.get(varName)!;
       

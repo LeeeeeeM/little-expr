@@ -1,0 +1,29 @@
+# 测试作用域功能
+int func(int x, int y) {
+  int a = 10;        # 函数级变量
+  
+  if (x > 0) {
+    int b = 20;      # 块级变量
+    int c = 30;      # 块级变量
+    
+    if (y > 0) {
+      int d = 40;    # 内层块级变量
+      print(d);
+      a = 19;
+    }
+    
+    print(b);
+    print(c);
+    print(a);        # 访问外层变量
+    print(x);        # 访问函数参数
+  }
+  
+  print(a);
+  return a;
+}
+
+int main() {
+  int result = func(5, 3);
+  print(result);
+  return 0;
+}

@@ -1,0 +1,27 @@
+# 测试 for 循环块级作用域变量
+int func(int x) {
+  int a = 10;        # 函数级变量
+  
+  for (int i = 1; i <= 3; i = i + 1) {
+    int b = i * 2;   # for 循环块级变量
+    print(b);        # 打印块级变量
+    
+    if (i == 2) {
+      int c = b + 10; # 内层块级变量
+      print(c);       # 打印内层块级变量
+      print(a);       # 访问外层函数级变量
+    }
+    
+    print(i);         # 打印 for 循环变量
+  }
+  
+  print(a);           # 打印函数级变量
+  print(x);           # 打印函数参数
+  return a;
+}
+
+int main() {
+  int result = func(5);
+  print(result);
+  return 0;
+}

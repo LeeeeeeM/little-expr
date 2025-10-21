@@ -259,7 +259,11 @@ export class StatementCodeGenerator {
     
     // 生成then分支
     this.generateStatement(statement.thenBranch);
-    this.assemblyCode.push(`  jmp ${endLabel}`);
+    
+    // 只有当有else分支时才需要跳转到end
+    if (statement.elseBranch) {
+      this.assemblyCode.push(`  jmp ${endLabel}`);
+    }
     
     // 生成else分支
     this.assemblyCode.push(`${elseLabel}:`);
@@ -345,13 +349,39 @@ export class StatementCodeGenerator {
 
   private countLocalVariables(body: BlockStatement): number {
     let count = 0;
-    for (const stmt of body.statements) {
+    const declaredVars = new Set<string>();
+    
+    const processStatement = (stmt: Statement): void => {
       if (stmt.type === 'VariableDeclaration') {
+        const varDecl = stmt as VariableDeclaration;
+        declaredVars.add(varDecl.name);
         count++;
+      } else if (stmt.type === 'AssignmentStatement') {
+        const assignment = stmt as AssignmentStatement;
+        // 如果变量还没有被声明，则需要在栈上分配空间
+        if (!declaredVars.has(assignment.target.name)) {
+          declaredVars.add(assignment.target.name);
+          count++;
+        }
+      } else if (stmt.type === 'BlockStatement') {
+        const block = stmt as BlockStatement;
+        for (const nestedStmt of block.statements) {
+          processStatement(nestedStmt);
+        }
+      } else if (stmt.type === 'IfStatement') {
+        const ifStmt = stmt as IfStatement;
+        processStatement(ifStmt.thenBranch);
+        if (ifStmt.elseBranch) {
+          processStatement(ifStmt.elseBranch);
+        }
+      } else if (stmt.type === 'WhileStatement') {
+        const whileStmt = stmt as WhileStatement;
+        processStatement(whileStmt.body);
       }
-      if (stmt.type === 'BlockStatement') {
-        count += this.countLocalVariables(stmt as BlockStatement);
-      }
+    };
+    
+    for (const stmt of body.statements) {
+      processStatement(stmt);
     }
     return count;
   }
@@ -447,6 +477,10 @@ export class StatementCodeGenerator {
         this.assemblyCode.push(`  mov edx, 0            ; 清零edx`);
         this.assemblyCode.push(`  idiv ebx             ; 执行除法`);
         return 'eax';
+      case '%':
+        // 直接使用mod指令
+        this.assemblyCode.push(`  mod eax, ebx         ; eax = eax % ebx`);
+        return 'eax';
       case '**':
         // 指数运算需要特殊处理
         this.assemblyCode.push(`  ; Power operation`);
@@ -508,8 +542,9 @@ export class StatementCodeGenerator {
     
     switch (expression.operator) {
       case '-':
-        this.assemblyCode.push(`  mov eax, ${operand}`);
-        this.assemblyCode.push(`  neg eax`);
+        this.assemblyCode.push(`  mov eax, 0`);
+        this.assemblyCode.push(`  mov ebx, ${operand}`);
+        this.assemblyCode.push(`  sub eax, ebx`);
         return 'eax';
       case '!':
         this.assemblyCode.push(`  mov eax, ${operand}`);

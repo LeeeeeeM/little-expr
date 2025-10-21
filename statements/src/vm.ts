@@ -1,5 +1,5 @@
 // 虚拟机实现 - 执行step3.txt格式的汇编代码
-// 支持指令：LI, SI, PRT, add, call, cmp, exit, imul, jg, jl, jle, jmp, mov, pop, push, ret, sub
+// 支持指令：LI, SI, PRT, add, call, cmp, exit, imul, jg, jl, jle, jmp, mov, pop, push, ret, sub, idiv, jne, jge, mod, je
 
 interface VMState {
   // 寄存器
@@ -10,7 +10,7 @@ interface VMState {
   pc: number;   // 程序计数器
   
   // 栈
-  stack: Int32Array;
+  stack: number[];
   
   // 标志位
   flags: {
@@ -26,7 +26,7 @@ interface VMState {
 export class VirtualMachine {
   private state: VMState;
   private instructions: string[];
-  private maxSteps: number = 10000; // 防止无限循环
+  private maxSteps: number = 1000000; // 防止无限循环
 
   constructor(instructions: string[]) {
     this.instructions = instructions;
@@ -36,7 +36,7 @@ export class VirtualMachine {
       ebp: 0,
       esp: 0,
       pc: 0,
-      stack: new Int32Array(256), // 1KB 栈 (256 * 4 bytes)
+      stack: new Array(256).fill(0), // 256个元素的普通数组
       flags: {
         greater: false,
         equal: false,
@@ -55,7 +55,7 @@ export class VirtualMachine {
     let stepCount = 0;
 
     
-    while (this.state.running && this.state.pc < this.instructions.length && stepCount < this.maxSteps) {
+    while (this.state.running && this.state.pc < this.instructions.length) {
       const instruction = this.instructions[this.state.pc];
       if (!instruction) break;
 
@@ -67,7 +67,6 @@ export class VirtualMachine {
       }
 
       const opcode = parts[0]?.toLowerCase() || '';
-      
       
       try {
         this.executeInstruction(opcode, parts);
@@ -85,9 +84,6 @@ export class VirtualMachine {
       stepCount++;
     }
 
-    if (stepCount >= this.maxSteps) {
-      console.log(`达到最大步数限制 (${this.maxSteps})，停止执行`);
-    }
     return output;
   }
 
@@ -126,6 +122,18 @@ export class VirtualMachine {
       case 'jg':
         this.executeJg(parts);
         break;
+      case 'jne':
+        this.executeJne(parts);
+        break;
+      case 'jge':
+        this.executeJge(parts);
+        break;
+      case 'idiv':
+        this.executeIdiv(parts);
+        break;
+      case 'mod':
+        this.executeMod(parts);
+        break;
       case 'call':
         this.executeCall(parts);
         break;
@@ -143,6 +151,9 @@ export class VirtualMachine {
         break;
       case 'exit':
         this.executeExit(parts);
+        break;
+      case 'je':
+        this.executeJe(parts);
         break;
       default:
         console.warn(`未知指令: ${opcode}`);
@@ -242,12 +253,15 @@ export class VirtualMachine {
     }
   }
 
-  // imul eax, ebx
+  // imul eax, ebx 或 imul ebx
   private executeImul(parts: string[]): void {
     const dest = parts[1] || '';
     const src = parts[2] || '';
     
     if (dest === 'eax' && src === 'ebx') {
+      this.state.eax *= this.state.ebx;
+    } else if (dest === 'ebx' && (src === '' || src === undefined)) {
+      // imul ebx 格式：eax = eax * ebx
       this.state.eax *= this.state.ebx;
     }
   }
@@ -301,6 +315,55 @@ export class VirtualMachine {
   private executeJg(parts: string[]): void {
     if (this.state.flags.greater) {
       this.state.pc = (parseInt(parts[1] || '0') || 0) - 1;
+    }
+  }
+
+  // jge <addr> - Jump if Greater or Equal
+  private executeJge(parts: string[]): void {
+    if (this.state.flags.greater || this.state.flags.equal) {
+      this.state.pc = (parseInt(parts[1] || '0') || 0) - 1;
+    }
+  }
+
+  // jne <addr> - Jump if Not Equal
+  private executeJne(parts: string[]): void {
+    if (!this.state.flags.equal) {
+      this.state.pc = (parseInt(parts[1] || '0') || 0) - 1;
+    }
+  }
+
+  // idiv <reg> - Integer Division
+  private executeIdiv(parts: string[]): void {
+    const divisor = parts[1] || '';
+    let divisorValue: number;
+    
+    if (divisor === 'ebx') {
+      divisorValue = this.state.ebx;
+    } else {
+      divisorValue = parseInt(divisor) || 1;
+    }
+    
+    if (divisorValue === 0) {
+      console.error('Division by zero');
+      return;
+    }
+    
+    // 执行整数除法，商存储在 eax 中
+    this.state.eax = Math.floor(this.state.eax / divisorValue);
+  }
+
+  // mod <dest>, <src> - Modulo Operation
+  private executeMod(parts: string[]): void {
+    const dest = parts[1] || '';
+    const src = parts[2] || '';
+    
+    if (dest === 'eax' && src === 'ebx') {
+      if (this.state.ebx === 0) {
+        console.error('Modulo by zero');
+        return;
+      }
+      // 执行取模运算：eax = eax % ebx
+      this.state.eax = this.state.eax % this.state.ebx;
     }
   }
 
@@ -374,6 +437,13 @@ export class VirtualMachine {
     
     // 直接从栈地址读取值
     return this.state.stack[addr] ?? 0;
+  }
+
+  // je <label> - 跳转等于
+  private executeJe(parts: string[]): void {
+    if (this.state.flags.equal) {
+      this.state.pc = (parseInt(parts[1] || '0') || 0) - 1;
+    }
   }
 
   // 获取虚拟机状态（用于调试）

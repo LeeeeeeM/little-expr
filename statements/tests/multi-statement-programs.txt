@@ -32,14 +32,3 @@ print(1 + 2 + 3);
 ## 表达式程序
 int result = (1 + 2) * (3 + 4);
 print(result);
-
-## 比较程序
-int a = 5;
-int b = 3;
-print(a > b);
-
-## 逻辑程序
-int x = 1;
-int y = 0;
-print(x && y);
-

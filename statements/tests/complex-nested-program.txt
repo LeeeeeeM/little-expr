@@ -1,43 +1,141 @@
-# 复杂嵌套程序测试用例
-# 包含变量声明、赋值、表达式计算、if-else语句、while循环
-
-## 复杂嵌套程序 - 条件累加
-int sum = 0;
-int count = 1;
-int maxCount = 10;
-
-while (count <= maxCount) {
-    if (count > 5) {
-        sum = sum + count * 2;
-        print(sum);
-    } else {
-        sum = sum + count;
-        print(sum);
-    }
-    count = count + 1;
+int fibonacci(int n) {
+  if (n <= 1) {
+    return n;
+  }
+  
+  int a = 0;
+  int b = 1;
+  int i = 2;
+  
+  while (i <= n) {
+    int temp = a + b;
+    a = b;
+    b = temp;
+    i = i + 1;
+  }
+  
+  return b;
 }
 
-print(sum);
+int isPrime(int num) {
+  if (num <= 1) {
+    return 0;
+  }
+  
+  if (num == 2) {
+    return 1;
+  }
+  
+  int i = 2;
+  while (i * i <= num) {
+    int temp = num / i;
+    if (temp * i == num) {
+      return 0;
+    }
+    i = i + 1;
+  }
+  
+  return 1;
+}
 
-## 预期输出
-# 1, 3, 6, 10, 15, 27, 41, 57, 75, 95, 95
-# 最终变量状态: sum=95, count=11, maxCount=10
+int factorial(int n) {
+  if (n <= 1) {
+    return 1;
+  }
+  
+  int result = 1;
+  int i = 2;
+  
+  while (i <= n) {
+    result = result * i;
+    i = i + 1;
+  }
+  
+  return result;
+}
 
-## 程序逻辑说明
-# 1. 初始化三个变量：sum(累加和), count(计数器), maxCount(最大值)
-# 2. while循环：count从1到10
-# 3. if-else条件：count > 5时，sum加上count*2；否则sum加上count
-# 4. 每次循环都打印当前的sum值
-# 5. 循环结束后打印最终的sum值
+int complexMath(int x, int y) {
+  int result = 0;
+  
+  if (x > y) {
+    int i = 1;
+    while (i <= x) {
+      if (i % 2 == 0) {
+        result = result + i * i;
+      } else {
+        result = result + i;
+      }
+      i = i + 1;
+    }
+  } else {
+    int j = y;
+    while (j >= 1) {
+      if (j % 3 == 0) {
+        result = result + j * 2;
+      } else {
+        result = result + j;
+      }
+      j = j - 1;
+    }
+  }
+  
+  return result;
+}
 
-## AST结构特点
-# - Program根节点包含4个语句：3个变量声明 + 1个while循环 + 1个print
-# - WhileStatement包含复杂的条件表达式和嵌套的IfStatement
-# - IfStatement包含复杂的赋值表达式和函数调用
-# - 多层嵌套的BlockStatement结构
+int moduloDemo(int n) {
+  int result = 0;
+  
+  int i = 1;
+  while (i <= n) {
+    if (i % 4 == 0) {
+      result = result + i * 3;
+    } else if (i % 3 == 0) {
+      result = result + i * 2;
+    } else if (i % 2 == 0) {
+      result = result + i;
+    } else {
+      result = result + i % 5;
+    }
+    i = i + 1;
+  }
+  
+  return result;
+}
 
-## 汇编代码特点
-# - 使用优化的条件跳转指令：jg, jle
-# - 清晰的标签命名：loop_0, else_2, end_3, end_1
-# - 复杂的表达式计算：乘法、加法、赋值
-# - 完整的控制流实现：循环、条件分支
+int main() {
+  int sum = 0;
+  int count = 1;
+  int maxCount = 8;
+  
+  print(0);
+  
+  while (count <= maxCount) {
+    if (count <= 3) {
+      int fib = fibonacci(count);
+      sum = sum + fib;
+      print(sum);
+    } else if (count <= 5) {
+      int fact = factorial(count - 2);
+      sum = sum + fact;
+      print(sum);
+    } else if (count <= 7) {
+      int complex = complexMath(count, count - 1);
+      sum = sum + complex;
+      print(sum);
+    } else {
+      int modulo = moduloDemo(count);
+      sum = sum + modulo;
+      print(sum);
+    }
+    
+    count = count + 1;
+  }
+  
+  int finalResult = complexMath(sum, maxCount);
+  print(finalResult);
+  
+  int moduloTest = moduloDemo(10);
+  print(moduloTest);
+  
+  return 0;
+}

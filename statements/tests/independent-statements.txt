@@ -33,5 +33,3 @@ print(j);
 ## 复杂表达式
 int complex = (1 + 2) * (3 + 4);
 int negative = -5;
-int comparison = 5 == 5;
-int logical = 1 && 0;

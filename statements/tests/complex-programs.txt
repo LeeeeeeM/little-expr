@@ -43,12 +43,3 @@ int modulo = 10 % 3;
 print(result);
 print(power);
 print(modulo);
-
-## 逻辑运算
-int x = 5;
-int y = 3;
-print(x > y);
-print(x == y);
-print(x != y);
-print(x > 0 && y > 0);
-print(x > 10 || y > 10);

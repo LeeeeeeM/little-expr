@@ -30,6 +30,8 @@ export class StatementCodeGenerator {
   private variables: Map<string, string> = new Map(); // 变量名 -> 栈偏移地址
   private functions: Map<string, FunctionDeclaration> = new Map();
   private stackOffset = 0; // 当前栈偏移
+  private continueStack: string[] = []; // continue 标签栈
+  private breakStack: string[] = []; // break 标签栈
 
   constructor() {
     this.setupBuiltinFunctions();
@@ -276,12 +278,18 @@ export class StatementCodeGenerator {
   private generateWhileStatement(statement: WhileStatement): void {
     const loopLabel = this.generateLabel('loop');
     const endLabel = this.generateLabel('end');
+    const continueLabel = this.generateLabel('continue');
+    const breakLabel = this.generateLabel('break');
+    
+    // 推入当前循环的标签
+    this.continueStack.push(continueLabel);
+    this.breakStack.push(breakLabel);
     
     // 保存当前栈偏移
     const prevStackOffset = this.stackOffset;
     
     this.assemblyCode.push(`${loopLabel}:`);
-    this.assemblyCode.push(`continue_target:`);
+    this.assemblyCode.push(`${continueLabel}:`);
     
     // 优化：直接生成条件跳转
     this.generateConditionalJump(statement.condition, endLabel);
@@ -291,15 +299,25 @@ export class StatementCodeGenerator {
     
     this.assemblyCode.push(`  jmp ${loopLabel}`);
     this.assemblyCode.push(`${endLabel}:`);
-    this.assemblyCode.push(`break_target:`);
+    this.assemblyCode.push(`${breakLabel}:`);
     
     // 恢复栈偏移
     this.stackOffset = prevStackOffset;
+    
+    // 弹出当前循环的标签
+    this.continueStack.pop();
+    this.breakStack.pop();
   }
 
   private generateForStatement(statement: ForStatement): void {
     const loopLabel = this.generateLabel('loop');
     const endLabel = this.generateLabel('end');
+    const continueLabel = this.generateLabel('continue');
+    const breakLabel = this.generateLabel('break');
+    
+    // 推入当前循环的标签
+    this.continueStack.push(continueLabel);
+    this.breakStack.push(breakLabel);
     
     // 生成初始化
     if (statement.init) {
@@ -316,7 +334,7 @@ export class StatementCodeGenerator {
     // 生成循环体
     this.generateStatement(statement.body);
     
-    this.assemblyCode.push(`continue_target:`); // 添加 continue_target 标签
+    this.assemblyCode.push(`${continueLabel}:`); // 添加 continue_target 标签
     
     // 生成更新
     if (statement.update) {
@@ -325,7 +343,11 @@ export class StatementCodeGenerator {
     
     this.assemblyCode.push(`  jmp ${loopLabel}`);
     this.assemblyCode.push(`${endLabel}:`);
-    this.assemblyCode.push(`break_target:`); // 添加 break_target 标签
+    this.assemblyCode.push(`${breakLabel}:`); // 添加 break_target 标签
+    
+    // 弹出当前循环的标签
+    this.continueStack.pop();
+    this.breakStack.pop();
   }
 
   private generateReturnStatement(statement: ReturnStatement): void {
@@ -384,6 +406,15 @@ export class StatementCodeGenerator {
       } else if (stmt.type === 'WhileStatement') {
         const whileStmt = stmt as WhileStatement;
         processStatement(whileStmt.body);
+      } else if (stmt.type === 'ForStatement') {
+        const forStmt = stmt as ForStatement;
+        // 处理 for 循环的初始化语句（可能包含变量声明）
+        // 虽然变量作用域只在循环内，后续处理
+        if (forStmt.init) {
+          processStatement(forStmt.init);
+        }
+        // 处理 for 循环体
+        processStatement(forStmt.body);
       }
     };
     
@@ -393,16 +424,18 @@ export class StatementCodeGenerator {
     return count;
   }
 
-  private generateBreakStatement(statement: BreakStatement): void {
-    // break 语句需要跳转到循环结束
-    // 使用一个特殊的标签来表示循环结束
-    this.assemblyCode.push(`  jmp break_target  ; break statement`);
-  }
-
   private generateContinueStatement(statement: ContinueStatement): void {
     // continue 语句需要跳转到循环开始
-    // 使用一个特殊的标签来表示循环开始
-    this.assemblyCode.push(`  jmp continue_target  ; continue statement`);
+    // 使用栈顶的 continue 标签
+    const continueLabel = this.continueStack[this.continueStack.length - 1];
+    this.assemblyCode.push(`  jmp ${continueLabel}  ; continue statement`);
+  }
+
+  private generateBreakStatement(statement: BreakStatement): void {
+    // break 语句需要跳转到循环结束
+    // 使用栈顶的 break 标签
+    const breakLabel = this.breakStack[this.breakStack.length - 1];
+    this.assemblyCode.push(`  jmp ${breakLabel}  ; break statement`);
   }
 
   private generateBlockStatement(statement: BlockStatement): void {
@@ -688,6 +721,8 @@ export class StatementCodeGenerator {
     this.variables.clear();
     this.functions.clear();
     this.stackOffset = 0;
+    this.continueStack = [];
+    this.breakStack = [];
     this.setupBuiltinFunctions();
   }
 

@@ -85,9 +85,27 @@ export class StatementLexer {
       } else if (char === ' ' || char === '\t') {
         this.column++;
         this.position++;
+      } else if (char === '#') {
+        // 跳过 # 注释到行尾
+        this.skipLineComment();
+      } else if (char === '/' && this.position + 1 < this.source.length && this.source[this.position + 1] === '/') {
+        // 跳过 // 注释到行尾
+        this.skipLineComment();
       } else {
         break;
       }
+    }
+  }
+
+  private skipLineComment(): void {
+    // 跳过注释到行尾
+    while (this.position < this.source.length) {
+      const char = this.source[this.position];
+      if (char === '\n' || char === '\r') {
+        break;
+      }
+      this.position++;
+      this.column++;
     }
   }
 

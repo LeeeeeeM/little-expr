@@ -1,0 +1,72 @@
+int a(int x) {
+  print(100);
+  print(x);
+  
+  for (int i = 1; i <= 5; i = i + 1) {
+    if (i == 2) {
+      continue;
+    }
+    if (i == 4) {
+      break;
+    }
+    print(i);
+  }
+  
+  int j = 1;
+  while (j <= 3) {
+    if (j == 2) {
+      j = j + 1;
+      continue;
+    }
+    if (j == 3) {
+      break;
+    }
+    print(j + 10);
+    j = j + 1;
+  }
+  
+  print(200);
+  return x + 1;
+}
+
+int b(int y, int z) {
+  print(300);
+  print(y);
+  print(z);
+  
+  for (int k = 6; k <= 10; k = k + 1) {
+    if (k == 7) {
+      continue;
+    }
+    if (k == 9) {
+      break;
+    }
+    print(k);
+  }
+  
+  int m = 5;
+  while (m <= 8) {
+    if (m == 6) {
+      m = m + 1;
+      continue;
+    }
+    if (m == 8) {
+      break;
+    }
+    print(m + 20);
+    m = m + 1;
+  }
+  
+  print(400);
+  return y + z;
+}
+
+int main() {
+  print(0);
+  int result1 = a(10);
+  int result2 = b(20, 30);
+  print(result1);
+  print(result2);
+  print(500);
+  return 0;
+}

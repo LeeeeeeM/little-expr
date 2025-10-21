@@ -240,13 +240,13 @@ function main(): void {
     }
   } else {
     console.log("用法:");
-    console.log("  bun run unified-test-runner.ts                    # 运行所有测试");
-    console.log("  bun run unified-test-runner.ts <文件> <类型>      # 运行指定测试");
+    console.log("  bun run test-runner.ts                    # 运行所有测试");
+    console.log("  bun run test-runner.ts <文件> <类型>      # 运行指定测试");
     console.log("  类型: single (独立语句) 或 multi (多语句程序)");
     console.log("");
     console.log("示例:");
-    console.log("  bun run unified-test-runner.ts independent-statements.txt single");
-    console.log("  bun run unified-test-runner.ts multi-statement-programs.txt multi");
+    console.log("  bun run test-runner.ts independent-statements.txt single");
+    console.log("  bun run test-runner.ts multi-statement-programs.txt multi");
   }
 }
 

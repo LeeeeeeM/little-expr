@@ -1,0 +1,16 @@
+# Continue 和 Break 语句测试用例
+
+int i = 1;
+while (i <= 10) {
+  if (i == 3) {
+    i = i + 1;
+    continue;
+  }
+  
+  if (i == 8) {
+    break;
+  }
+  
+  print(i);
+  i = i + 1;
+}

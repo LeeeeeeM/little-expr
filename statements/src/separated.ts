@@ -278,7 +278,11 @@ export class StatementCodeGenerator {
     const loopLabel = this.generateLabel('loop');
     const endLabel = this.generateLabel('end');
     
+    // 保存当前栈偏移
+    const prevStackOffset = this.stackOffset;
+    
     this.assemblyCode.push(`${loopLabel}:`);
+    this.assemblyCode.push(`continue_target:`);
     
     // 优化：直接生成条件跳转
     this.generateConditionalJump(statement.condition, endLabel);
@@ -288,6 +292,10 @@ export class StatementCodeGenerator {
     
     this.assemblyCode.push(`  jmp ${loopLabel}`);
     this.assemblyCode.push(`${endLabel}:`);
+    this.assemblyCode.push(`break_target:`);
+    
+    // 恢复栈偏移
+    this.stackOffset = prevStackOffset;
   }
 
   private generateForStatement(statement: ForStatement): void {
@@ -387,13 +395,15 @@ export class StatementCodeGenerator {
   }
 
   private generateBreakStatement(statement: BreakStatement): void {
-    // 在实际实现中，这里需要跳转到循环结束标签
-    this.assemblyCode.push(`  ; break statement`);
+    // break 语句需要跳转到循环结束
+    // 使用一个特殊的标签来表示循环结束
+    this.assemblyCode.push(`  jmp break_target  ; break statement`);
   }
 
   private generateContinueStatement(statement: ContinueStatement): void {
-    // 在实际实现中，这里需要跳转到循环开始标签
-    this.assemblyCode.push(`  ; continue statement`);
+    // continue 语句需要跳转到循环开始
+    // 使用一个特殊的标签来表示循环开始
+    this.assemblyCode.push(`  jmp continue_target  ; continue statement`);
   }
 
   private generateBlockStatement(statement: BlockStatement): void {

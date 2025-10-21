@@ -7,7 +7,7 @@ int change(int a, int b) {
   int d = 2;
   int e = 0;
   if (a >= b) {
-    e = a * b + c * d
+    e = a * b + c * d;
   } else {
     e = a * b - c * d;
   }
@@ -32,7 +32,7 @@ int main() {
       count = count + 1;
   }
 
-  sum = change(sum, maxCount)
+  sum = change(sum, maxCount);
 
   print(sum);
   return 0;

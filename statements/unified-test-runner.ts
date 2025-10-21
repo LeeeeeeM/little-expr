@@ -2,9 +2,7 @@
 // 统一测试运行器
 // 整合所有测试用例，支持独立语句和多语句程序测试
 
-import { StatementInterpreter } from '../statements/index';
-import { StatementParser } from '../statements/parser';
-import { StatementCodeGenerator } from '../statements/separated';
+import { StatementInterpreter } from './src/index';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 

@@ -97,6 +97,9 @@
                       }
                     }
                   }
+                },
+                {
+                  "type": "EmptyStatement"
                 }
               ]
             },
@@ -371,6 +374,9 @@
                 }
               ]
             }
+          },
+          {
+            "type": "EmptyStatement"
           },
           {
             "type": "ExpressionStatement",

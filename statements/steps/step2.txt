@@ -43,8 +43,8 @@
 [42]: PRT             ; 系统调用print
 [43]: add esp, 1      ; 清理栈参数
 [44]: mov eax, 0         ; 加载常量 0
-[45]: SI -100              ; 初始化for循环变量 j
-[46]: LI -100              ; 加载变量 j ; loop_4
+[45]: SI -3              ; 初始化for循环变量 j
+[46]: LI -3              ; 加载变量 j ; loop_4
 [47]: push eax              ; 保存左操作数到栈
 [48]: mov eax, 3         ; 加载常量 3
 [49]: mov ebx, eax          ; 右操作数到ebx
@@ -52,7 +52,7 @@
 [51]: cmp eax, ebx          ; 比较操作数
 [52]: jge end_5
 [53]: sub esp, 2            ; 为2个块级变量分配栈空间
-[54]: LI -100              ; 加载变量 j
+[54]: LI -3              ; 加载变量 j
 [55]: push eax              ; 保存左操作数到栈
 [56]: mov eax, 1         ; 加载常量 1
 [57]: mov ebx, eax          ; 右操作数到ebx
@@ -89,13 +89,13 @@
 [88]: PRT             ; 系统调用print
 [89]: add esp, 1      ; 清理栈参数
 [90]: add esp, 2            ; 释放块级变量栈空间
-[91]: LI -100              ; 加载变量 j ; continue_6
+[91]: LI -3              ; 加载变量 j ; continue_6
 [92]: push eax              ; 保存左操作数到栈
 [93]: mov eax, 1         ; 加载常量 1
 [94]: mov ebx, eax          ; 右操作数到ebx
 [95]: pop eax               ; 从栈恢复左操作数
 [96]: add eax, ebx          ; 执行加法
-[97]: SI -100             ; 存储到变量 j
+[97]: SI -3             ; 存储到变量 j
 [98]: jmp loop_4
 [99]: mov eax, 0         ; 加载常量 0 ; end_5, break_7
 [100]: mov esp, ebp             ; 恢复栈指针

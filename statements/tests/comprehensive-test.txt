@@ -2,6 +2,7 @@
 int main() {
   int sum = 0;
   int i = 0;
+  int j = 5;
   
   # while 循环测试
   while (i < 5) {
@@ -24,6 +25,23 @@ int main() {
     }
     
     print(product);
+  }
+
+  while (j > 0) {
+    # for 循环测试
+    for (int j = 0; j < 3; j = j + 1) {
+      let multiplier = j + 1;  # let 变量在 for 循环块中
+      int product = sum * multiplier;
+      
+      # 嵌套块级作用域
+      if (product > 30) {
+        let bonus = 10;  # let 变量在 if 块中
+        product = product + bonus;
+      }
+      
+      print(product);
+    }
+    j = j - 1;
   }
   
   return 0;

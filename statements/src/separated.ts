@@ -76,10 +76,8 @@ class ScopeManager {
   declareBlockVariable(name: string): number {
     const currentScope = this.scopes[this.scopes.length - 1]!;
     
-    // 检查是否已经声明过
-    if (currentScope.has(name)) {
-      throw new Error(`变量 '${name}' 已经在当前作用域中声明过`);
-    }
+    // 允许变量遮蔽：内层作用域可以遮蔽外层作用域的变量
+    // 不检查是否已经声明过，直接覆盖
     
     // 块级变量使用简单的递增计数，从当前blockVariableCount开始
     const offset = -(++this.blockVariableCount);
@@ -124,9 +122,8 @@ class ScopeManager {
   // 查找变量
   getVariable(name: string): number | null {
     // 首先检查for循环变量
-    const forLoopOffset = this.getForLoopVariable(name);
-    if (forLoopOffset !== null) {
-      return forLoopOffset;
+    if (this.inForLoop && this.forLoopVariables.has(name)) {
+      return this.forLoopVariables.get(name)!;
     }
     
     // 从内层到外层查找
@@ -177,14 +174,11 @@ class ScopeManager {
   
   // 声明for循环变量
   declareForLoopVariable(name: string): number {
-    // 检查是否已经声明过
-    if (this.forLoopVariables.has(name)) {
-      throw new Error(`for循环变量 '${name}' 已经在当前for循环中声明过`);
-    }
+    // 允许变量遮蔽：内层作用域可以遮蔽外层作用域的变量
+    // 不检查是否已经声明过，直接覆盖
     
-    // for循环变量使用独立的偏移空间，从-100开始，按顺序分配
-    const offset = -100 - this.forLoopVariableOffset;
-    this.forLoopVariableOffset++;
+    // 使用块级变量的偏移空间，基于当前blockVariableCount继续递增
+    const offset = -(++this.blockVariableCount);
     this.forLoopVariables.set(name, offset);
     return offset;
   }
@@ -266,17 +260,14 @@ export class StatementCodeGenerator {
       switch (stmt.type) {
         case 'VariableDeclaration':
           const varDecl = stmt as VariableDeclaration;
-          console.log(`  找到函数级变量: ${varDecl.name}`);
           variables.push(varDecl.name);
           break;
         case 'LetDeclaration':
           const letDecl = stmt as LetDeclaration;
-          console.log(`  找到函数级let: ${letDecl.name}`);
           variables.push(letDecl.name);
           break;
         case 'ForStatement':
           // for 循环中的变量属于块级作用域，不在这里处理
-          console.log(`  扫描ForStatement - 跳过for循环变量`);
           break;
         // 其他语句类型不处理，因为它们不包含函数级变量
       }
@@ -506,16 +497,12 @@ export class StatementCodeGenerator {
     // 扫描函数级变量（不包括块级变量）
     const functionLevelVariables = this.scanFunctionLevelVariables(statement.body);
     
-    console.log(`扫描到的函数级变量: ${functionLevelVariables.join(', ')}`);
-    console.log(`函数级变量数量: ${functionLevelVariables.length}`);
-    
     // 记录当前函数的函数级变量数量
     this.currentFunctionVarCount = functionLevelVariables.length;
     
     // 只为函数级变量分配栈空间
     if (functionLevelVariables.length > 0) {
       this.assemblyCode.push(`  sub esp, ${functionLevelVariables.length}            ; 为${functionLevelVariables.length}个函数级变量分配栈空间`);
-      console.log(`生成指令: sub esp, ${functionLevelVariables.length}`);
     }
     
     // 兼容旧代码：处理函数参数
@@ -523,6 +510,12 @@ export class StatementCodeGenerator {
     const prevStackOffset = this.stackOffset;
     this.variables = new Map();
     this.stackOffset = 0;
+    
+    // 预先声明所有函数级变量
+    for (const varName of functionLevelVariables) {
+      const offset = this.scopeManager.declareFunctionVariable(varName);
+      this.variables.set(varName, `[ebp${offset}]`);
+    }
     
     // 处理函数参数 - 参数在栈上，从ebp+1开始
     let paramOffset = 1; // ebp+1是第一个参数
@@ -621,10 +614,13 @@ export class StatementCodeGenerator {
     // 进入for循环作用域
     this.scopeManager.enterForLoop();
     
+    // 设置块级变量的起始偏移（基于函数级变量数量）
+    this.scopeManager.setBlockVariableStartOffset();
+    
     // 生成初始化 - 如果是变量声明，需要特殊处理
     if (statement.init && statement.init.type === 'VariableDeclaration') {
       const varDecl = statement.init as VariableDeclaration;
-      // 声明for循环变量
+      // for循环变量使用块级变量的偏移空间
       const offset = this.scopeManager.declareForLoopVariable(varDecl.name);
       this.variables.set(varDecl.name, `[ebp${offset}]`);
       
@@ -774,16 +770,12 @@ export class StatementCodeGenerator {
       // 计算当前作用域的所有变量声明
       const processStatement = (stmt: Statement): void => {
         if (stmt.type === 'VariableDeclaration') {
-          console.log(`    找到块级变量声明: ${(stmt as VariableDeclaration).name}`);
           variableCount++;
         } else if (stmt.type === 'LetDeclaration') {
-          console.log(`    找到块级let声明: ${(stmt as LetDeclaration).name}`);
           variableCount++;
         } else if (stmt.type === 'ForStatement') {
           const forStmt = stmt as ForStatement;
           if (forStmt.init && forStmt.init.type === 'VariableDeclaration') {
-            const varDecl = forStmt.init as VariableDeclaration;
-            console.log(`    找到for循环变量: ${varDecl.name}`);
             variableCount++;
           }
         }
@@ -795,7 +787,6 @@ export class StatementCodeGenerator {
       
       if (variableCount > 0) {
         this.assemblyCode.push(`  sub esp, ${variableCount}            ; 为${variableCount}个块级变量分配栈空间`);
-        console.log(`生成块级指令: sub esp, ${variableCount}`);
       }
     }
     
@@ -807,7 +798,6 @@ export class StatementCodeGenerator {
     // 退出作用域
     if (!isFunctionBody && variableCount > 0) {
       this.assemblyCode.push(`  add esp, ${variableCount}            ; 释放块级变量栈空间`);
-      console.log(`生成块级指令: add esp, ${variableCount}`);
     }
     this.scopeManager.exitScope();
   }
@@ -818,10 +808,8 @@ export class StatementCodeGenerator {
     
     const processStatement = (stmt: Statement): void => {
       if (stmt.type === 'VariableDeclaration') {
-        console.log(`    找到块级变量声明: ${(stmt as VariableDeclaration).name}`);
         count++;
       } else if (stmt.type === 'LetDeclaration') {
-        console.log(`    找到块级let声明: ${(stmt as LetDeclaration).name}`);
         count++;
       } else if (stmt.type === 'BlockStatement') {
         const nestedBlock = stmt as BlockStatement;
@@ -840,7 +828,6 @@ export class StatementCodeGenerator {
       } else if (stmt.type === 'ForStatement') {
         const forStmt = stmt as ForStatement;
         if (forStmt.init && forStmt.init.type === 'VariableDeclaration') {
-          console.log(`    找到for循环变量: ${(forStmt.init as VariableDeclaration).name}`);
           count++;
         }
         processStatement(forStmt.body);

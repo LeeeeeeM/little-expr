@@ -4,169 +4,6 @@
   "statements": [
     {
       "type": "FunctionDeclaration",
-      "name": "change",
-      "returnType": "int",
-      "parameters": [
-        {
-          "name": "a",
-          "type": "int"
-        },
-        {
-          "name": "b",
-          "type": "int"
-        }
-      ],
-      "body": {
-        "type": "BlockStatement",
-        "statements": [
-          {
-            "type": "VariableDeclaration",
-            "name": "c",
-            "dataType": "int",
-            "initializer": {
-              "type": "NumberLiteral",
-              "value": 5
-            }
-          },
-          {
-            "type": "VariableDeclaration",
-            "name": "d",
-            "dataType": "int",
-            "initializer": {
-              "type": "NumberLiteral",
-              "value": 2
-            }
-          },
-          {
-            "type": "VariableDeclaration",
-            "name": "e",
-            "dataType": "int",
-            "initializer": {
-              "type": "NumberLiteral",
-              "value": 0
-            }
-          },
-          {
-            "type": "IfStatement",
-            "condition": {
-              "type": "BinaryExpression",
-              "operator": ">=",
-              "left": {
-                "type": "Identifier",
-                "name": "a"
-              },
-              "right": {
-                "type": "Identifier",
-                "name": "b"
-              }
-            },
-            "thenBranch": {
-              "type": "BlockStatement",
-              "statements": [
-                {
-                  "type": "AssignmentStatement",
-                  "target": {
-                    "type": "Identifier",
-                    "name": "e"
-                  },
-                  "value": {
-                    "type": "BinaryExpression",
-                    "operator": "+",
-                    "left": {
-                      "type": "BinaryExpression",
-                      "operator": "*",
-                      "left": {
-                        "type": "Identifier",
-                        "name": "a"
-                      },
-                      "right": {
-                        "type": "Identifier",
-                        "name": "b"
-                      }
-                    },
-                    "right": {
-                      "type": "BinaryExpression",
-                      "operator": "*",
-                      "left": {
-                        "type": "Identifier",
-                        "name": "c"
-                      },
-                      "right": {
-                        "type": "Identifier",
-                        "name": "d"
-                      }
-                    }
-                  }
-                },
-                {
-                  "type": "EmptyStatement"
-                }
-              ]
-            },
-            "elseBranch": {
-              "type": "BlockStatement",
-              "statements": [
-                {
-                  "type": "AssignmentStatement",
-                  "target": {
-                    "type": "Identifier",
-                    "name": "e"
-                  },
-                  "value": {
-                    "type": "BinaryExpression",
-                    "operator": "-",
-                    "left": {
-                      "type": "BinaryExpression",
-                      "operator": "*",
-                      "left": {
-                        "type": "Identifier",
-                        "name": "a"
-                      },
-                      "right": {
-                        "type": "Identifier",
-                        "name": "b"
-                      }
-                    },
-                    "right": {
-                      "type": "BinaryExpression",
-                      "operator": "*",
-                      "left": {
-                        "type": "Identifier",
-                        "name": "c"
-                      },
-                      "right": {
-                        "type": "Identifier",
-                        "name": "d"
-                      }
-                    }
-                  }
-                },
-                {
-                  "type": "EmptyStatement"
-                }
-              ]
-            }
-          },
-          {
-            "type": "ReturnStatement",
-            "value": {
-              "type": "BinaryExpression",
-              "operator": "+",
-              "left": {
-                "type": "Identifier",
-                "name": "e"
-              },
-              "right": {
-                "type": "NumberLiteral",
-                "value": 1
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "type": "FunctionDeclaration",
       "name": "main",
       "returnType": "int",
       "parameters": [],
@@ -184,160 +21,81 @@
           },
           {
             "type": "VariableDeclaration",
-            "name": "count",
+            "name": "i",
             "dataType": "int",
             "initializer": {
               "type": "NumberLiteral",
-              "value": 1
-            }
-          },
-          {
-            "type": "VariableDeclaration",
-            "name": "maxCount",
-            "dataType": "int",
-            "initializer": {
-              "type": "NumberLiteral",
-              "value": 10
+              "value": 0
             }
           },
           {
             "type": "WhileStatement",
             "condition": {
               "type": "BinaryExpression",
-              "operator": "<=",
+              "operator": "<",
               "left": {
                 "type": "Identifier",
-                "name": "count"
+                "name": "i"
               },
               "right": {
-                "type": "Identifier",
-                "name": "maxCount"
+                "type": "NumberLiteral",
+                "value": 5
               }
             },
             "body": {
               "type": "BlockStatement",
               "statements": [
                 {
-                  "type": "IfStatement",
-                  "condition": {
+                  "type": "LetDeclaration",
+                  "name": "temp",
+                  "dataType": "int",
+                  "initializer": {
                     "type": "BinaryExpression",
-                    "operator": ">",
+                    "operator": "*",
                     "left": {
                       "type": "Identifier",
-                      "name": "count"
+                      "name": "i"
                     },
                     "right": {
                       "type": "NumberLiteral",
-                      "value": 5
+                      "value": 2
                     }
-                  },
-                  "thenBranch": {
-                    "type": "BlockStatement",
-                    "statements": [
-                      {
-                        "type": "AssignmentStatement",
-                        "target": {
-                          "type": "Identifier",
-                          "name": "sum"
-                        },
-                        "value": {
-                          "type": "BinaryExpression",
-                          "operator": "+",
-                          "left": {
-                            "type": "Identifier",
-                            "name": "sum"
-                          },
-                          "right": {
-                            "type": "BinaryExpression",
-                            "operator": "*",
-                            "left": {
-                              "type": "Identifier",
-                              "name": "count"
-                            },
-                            "right": {
-                              "type": "NumberLiteral",
-                              "value": 2
-                            }
-                          }
-                        }
-                      },
-                      {
-                        "type": "EmptyStatement"
-                      },
-                      {
-                        "type": "ExpressionStatement",
-                        "expression": {
-                          "type": "FunctionCall",
-                          "callee": {
-                            "type": "Identifier",
-                            "name": "print"
-                          },
-                          "arguments": [
-                            {
-                              "type": "Identifier",
-                              "name": "sum"
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  },
-                  "elseBranch": {
-                    "type": "BlockStatement",
-                    "statements": [
-                      {
-                        "type": "AssignmentStatement",
-                        "target": {
-                          "type": "Identifier",
-                          "name": "sum"
-                        },
-                        "value": {
-                          "type": "BinaryExpression",
-                          "operator": "+",
-                          "left": {
-                            "type": "Identifier",
-                            "name": "sum"
-                          },
-                          "right": {
-                            "type": "Identifier",
-                            "name": "count"
-                          }
-                        }
-                      },
-                      {
-                        "type": "EmptyStatement"
-                      },
-                      {
-                        "type": "ExpressionStatement",
-                        "expression": {
-                          "type": "FunctionCall",
-                          "callee": {
-                            "type": "Identifier",
-                            "name": "print"
-                          },
-                          "arguments": [
-                            {
-                              "type": "Identifier",
-                              "name": "sum"
-                            }
-                          ]
-                        }
-                      }
-                    ]
                   }
                 },
                 {
                   "type": "AssignmentStatement",
                   "target": {
                     "type": "Identifier",
-                    "name": "count"
+                    "name": "sum"
                   },
                   "value": {
                     "type": "BinaryExpression",
                     "operator": "+",
                     "left": {
                       "type": "Identifier",
-                      "name": "count"
+                      "name": "sum"
+                    },
+                    "right": {
+                      "type": "Identifier",
+                      "name": "temp"
+                    }
+                  }
+                },
+                {
+                  "type": "EmptyStatement"
+                },
+                {
+                  "type": "AssignmentStatement",
+                  "target": {
+                    "type": "Identifier",
+                    "name": "i"
+                  },
+                  "value": {
+                    "type": "BinaryExpression",
+                    "operator": "+",
+                    "left": {
+                      "type": "Identifier",
+                      "name": "i"
                     },
                     "right": {
                       "type": "NumberLiteral",
@@ -352,33 +110,6 @@
             }
           },
           {
-            "type": "AssignmentStatement",
-            "target": {
-              "type": "Identifier",
-              "name": "sum"
-            },
-            "value": {
-              "type": "FunctionCall",
-              "callee": {
-                "type": "Identifier",
-                "name": "change"
-              },
-              "arguments": [
-                {
-                  "type": "Identifier",
-                  "name": "sum"
-                },
-                {
-                  "type": "Identifier",
-                  "name": "maxCount"
-                }
-              ]
-            }
-          },
-          {
-            "type": "EmptyStatement"
-          },
-          {
             "type": "ExpressionStatement",
             "expression": {
               "type": "FunctionCall",
@@ -390,6 +121,159 @@
                 {
                   "type": "Identifier",
                   "name": "sum"
+                }
+              ]
+            }
+          },
+          {
+            "type": "ForStatement",
+            "init": {
+              "type": "VariableDeclaration",
+              "name": "j",
+              "dataType": "int",
+              "initializer": {
+                "type": "NumberLiteral",
+                "value": 0
+              }
+            },
+            "condition": {
+              "type": "BinaryExpression",
+              "operator": "<",
+              "left": {
+                "type": "Identifier",
+                "name": "j"
+              },
+              "right": {
+                "type": "NumberLiteral",
+                "value": 3
+              }
+            },
+            "update": {
+              "type": "ExpressionStatement",
+              "expression": {
+                "type": "BinaryExpression",
+                "operator": "=",
+                "left": {
+                  "type": "Identifier",
+                  "name": "j"
+                },
+                "right": {
+                  "type": "BinaryExpression",
+                  "operator": "+",
+                  "left": {
+                    "type": "Identifier",
+                    "name": "j"
+                  },
+                  "right": {
+                    "type": "NumberLiteral",
+                    "value": 1
+                  }
+                }
+              }
+            },
+            "body": {
+              "type": "BlockStatement",
+              "statements": [
+                {
+                  "type": "LetDeclaration",
+                  "name": "multiplier",
+                  "dataType": "int",
+                  "initializer": {
+                    "type": "BinaryExpression",
+                    "operator": "+",
+                    "left": {
+                      "type": "Identifier",
+                      "name": "j"
+                    },
+                    "right": {
+                      "type": "NumberLiteral",
+                      "value": 1
+                    }
+                  }
+                },
+                {
+                  "type": "VariableDeclaration",
+                  "name": "product",
+                  "dataType": "int",
+                  "initializer": {
+                    "type": "BinaryExpression",
+                    "operator": "*",
+                    "left": {
+                      "type": "Identifier",
+                      "name": "sum"
+                    },
+                    "right": {
+                      "type": "Identifier",
+                      "name": "multiplier"
+                    }
+                  }
+                },
+                {
+                  "type": "IfStatement",
+                  "condition": {
+                    "type": "BinaryExpression",
+                    "operator": ">",
+                    "left": {
+                      "type": "Identifier",
+                      "name": "product"
+                    },
+                    "right": {
+                      "type": "NumberLiteral",
+                      "value": 30
+                    }
+                  },
+                  "thenBranch": {
+                    "type": "BlockStatement",
+                    "statements": [
+                      {
+                        "type": "LetDeclaration",
+                        "name": "bonus",
+                        "dataType": "int",
+                        "initializer": {
+                          "type": "NumberLiteral",
+                          "value": 10
+                        }
+                      },
+                      {
+                        "type": "AssignmentStatement",
+                        "target": {
+                          "type": "Identifier",
+                          "name": "product"
+                        },
+                        "value": {
+                          "type": "BinaryExpression",
+                          "operator": "+",
+                          "left": {
+                            "type": "Identifier",
+                            "name": "product"
+                          },
+                          "right": {
+                            "type": "Identifier",
+                            "name": "bonus"
+                          }
+                        }
+                      },
+                      {
+                        "type": "EmptyStatement"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "type": "ExpressionStatement",
+                  "expression": {
+                    "type": "FunctionCall",
+                    "callee": {
+                      "type": "Identifier",
+                      "name": "print"
+                    },
+                    "arguments": [
+                      {
+                        "type": "Identifier",
+                        "name": "product"
+                      }
+                    ]
+                  }
                 }
               ]
             }

@@ -1,0 +1,13 @@
+# 测试 let 声明后访问
+int func() {
+  int a = 10;
+  let b = 20;  # b 在这里声明
+  print(b);    # 这里访问 b
+  return a;
+}
+
+int main() {
+  int result = func();
+  print(result);
+  return 0;
+}

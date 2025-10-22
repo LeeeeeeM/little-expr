@@ -1,0 +1,16 @@
+# 测试 let 的 TDZ (Temporal Dead Zone)
+int func() {
+  int a = 10;
+  
+  # 测试 TDZ - 这应该会报错
+  print(b);  # 在 let b 声明之前访问，应该报错
+  let b = 20;
+  
+  return a;
+}
+
+int main() {
+  int result = func();
+  print(result);
+  return 0;
+}

@@ -84,6 +84,7 @@ export enum TokenType {
   BREAK = 'BREAK',                    // break
   CONTINUE = 'CONTINUE',              // continue
   INT = 'INT',                        // int
+  LET = 'LET',                        // let
   FUNCTION = 'FUNCTION',              // function
   
   // 比较操作符
@@ -119,6 +120,7 @@ export interface VariableInfo {
   type: DataType;
   value?: any;
   isInitialized: boolean;
+  isTDZ?: boolean; // TDZ 标记
 }
 
 // 函数信息

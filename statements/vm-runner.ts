@@ -4,7 +4,7 @@ import { VirtualMachine } from './src/vm';
 async function main() {
   try {
     // 读取 assemble.txt 文件
-    const step3Content = await Bun.file('statements/assemble.txt').text();
+    const step3Content = await Bun.file('assemble.txt').text();
     
     // 解析指令
     const lines = step3Content.split('\n').filter(line => line.trim());

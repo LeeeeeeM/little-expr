@@ -10,151 +10,119 @@ _start:
   call function_main     ; 调用main函数
   exit                  ; 退出程序
 
-function_change:
-  push ebp
-  mov ebp, esp
-  sub esp, 3            ; 为3个局部变量分配栈空间
-  mov eax, 5         ; 加载常量 5
-  SI -1              ; 初始化 c
-  mov eax, 2         ; 加载常量 2
-  SI -2              ; 初始化 d
-  mov eax, 0         ; 加载常量 0
-  SI -3              ; 初始化 e
-  LI +2              ; 加载参数 a
-  push eax              ; 保存左操作数到栈
-  LI +3              ; 加载参数 b
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  cmp eax, ebx          ; 比较操作数
-  jl else_0
-  LI +2              ; 加载参数 a
-  push eax              ; 保存左操作数到栈
-  LI +3              ; 加载参数 b
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  imul eax, ebx         ; 执行乘法
-  push eax              ; 保存左操作数到栈
-  LI -1              ; 加载局部变量 c
-  push eax              ; 保存左操作数到栈
-  LI -2              ; 加载局部变量 d
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  imul eax, ebx         ; 执行乘法
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  add eax, ebx          ; 执行加法
-  SI -3              ; 存储到 e
-  jmp end_1
-else_0:
-  LI +2              ; 加载参数 a
-  push eax              ; 保存左操作数到栈
-  LI +3              ; 加载参数 b
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  imul eax, ebx         ; 执行乘法
-  push eax              ; 保存左操作数到栈
-  LI -1              ; 加载局部变量 c
-  push eax              ; 保存左操作数到栈
-  LI -2              ; 加载局部变量 d
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  imul eax, ebx         ; 执行乘法
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  sub eax, ebx          ; 执行减法
-  SI -3              ; 存储到 e
-end_1:
-  LI -3              ; 加载局部变量 e
-  push eax              ; 保存左操作数到栈
-  mov eax, 1         ; 加载常量 1
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  add eax, ebx          ; 执行加法
-  mov esp, ebp             ; 恢复栈指针
-  pop ebp                  ; 恢复调用者BP
-  ret                      ; 返回调用者
-
 function_main:
   push ebp
   mov ebp, esp
-  sub esp, 3            ; 为3个局部变量分配栈空间
+  sub esp, 2            ; 为2个函数级变量分配栈空间
   mov eax, 0         ; 加载常量 0
   SI -1              ; 初始化 sum
-  mov eax, 1         ; 加载常量 1
-  SI -2              ; 初始化 count
-  mov eax, 10         ; 加载常量 10
-  SI -3              ; 初始化 maxCount
-loop_2:
-  LI -2              ; 加载局部变量 count
-  push eax              ; 保存左操作数到栈
-  LI -3              ; 加载局部变量 maxCount
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  cmp eax, ebx          ; 比较操作数
-  jg end_3
-  LI -2              ; 加载局部变量 count
+  mov eax, 0         ; 加载常量 0
+  SI -2              ; 初始化 i
+loop_0:
+continue_2:
+  LI -2              ; 加载变量 i
   push eax              ; 保存左操作数到栈
   mov eax, 5         ; 加载常量 5
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   cmp eax, ebx          ; 比较操作数
-  jle else_4
-  LI -1              ; 加载局部变量 sum
-  push eax              ; 保存左操作数到栈
-  LI -2              ; 加载局部变量 count
+  jge end_1
+  sub esp, 1            ; 为1个块级变量分配栈空间
+  LI -2              ; 加载变量 i
   push eax              ; 保存左操作数到栈
   mov eax, 2         ; 加载常量 2
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   imul eax, ebx         ; 执行乘法
-  mov ebx, eax          ; 右操作数到ebx
-  pop eax               ; 从栈恢复左操作数
-  add eax, ebx          ; 执行加法
-  SI -1              ; 存储到 sum
-  LI -1              ; 加载局部变量 sum
-  push eax        ; 参数1入栈
-  ; print(1个参数)
-  PRT             ; 系统调用print
-  add esp, 1      ; 清理栈参数
-  ; Expression result in eax
-  jmp end_5
-else_4:
-  LI -1              ; 加载局部变量 sum
+  SI -3              ; 初始化 let temp
+  LI -1              ; 加载变量 sum
   push eax              ; 保存左操作数到栈
-  LI -2              ; 加载局部变量 count
+  LI -3              ; 加载变量 temp
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   add eax, ebx          ; 执行加法
   SI -1              ; 存储到 sum
-  LI -1              ; 加载局部变量 sum
-  push eax        ; 参数1入栈
-  ; print(1个参数)
-  PRT             ; 系统调用print
-  add esp, 1      ; 清理栈参数
-  ; Expression result in eax
-end_5:
-  LI -2              ; 加载局部变量 count
+  LI -2              ; 加载变量 i
   push eax              ; 保存左操作数到栈
   mov eax, 1         ; 加载常量 1
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   add eax, ebx          ; 执行加法
-  SI -2              ; 存储到 count
-  jmp loop_2
-end_3:
-  LI -3              ; 加载局部变量 maxCount
-  push eax        ; 参数2入栈
-  LI -1              ; 加载局部变量 sum
-  push eax        ; 参数1入栈
-  call function_change
-  add esp, 2      ; 清理栈参数
-  SI -1              ; 存储到 sum
-  LI -1              ; 加载局部变量 sum
+  SI -2              ; 存储到 i
+  add esp, 1            ; 释放块级变量栈空间
+  jmp loop_0
+end_1:
+break_3:
+  LI -1              ; 加载变量 sum
   push eax        ; 参数1入栈
   ; print(1个参数)
   PRT             ; 系统调用print
   add esp, 1      ; 清理栈参数
   ; Expression result in eax
+  mov eax, 0         ; 加载常量 0
+  SI -4              ; 初始化 j
+loop_4:
+  LI -4              ; 加载变量 j
+  push eax              ; 保存左操作数到栈
+  mov eax, 3         ; 加载常量 3
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jge end_5
+  sub esp, 2            ; 为2个块级变量分配栈空间
+  LI -4              ; 加载变量 j
+  push eax              ; 保存左操作数到栈
+  mov eax, 1         ; 加载常量 1
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -5              ; 初始化 let multiplier
+  LI -1              ; 加载变量 sum
+  push eax              ; 保存左操作数到栈
+  LI -5              ; 加载变量 multiplier
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  imul eax, ebx         ; 执行乘法
+  SI -6              ; 初始化 product
+  LI -6              ; 加载变量 product
+  push eax              ; 保存左操作数到栈
+  mov eax, 30         ; 加载常量 30
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  cmp eax, ebx          ; 比较操作数
+  jle else_8
+  sub esp, 1            ; 为1个块级变量分配栈空间
+  mov eax, 10         ; 加载常量 10
+  SI -7              ; 初始化 let bonus
+  LI -6              ; 加载变量 product
+  push eax              ; 保存左操作数到栈
+  LI -7              ; 加载变量 bonus
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -6              ; 存储到 product
+  add esp, 1            ; 释放块级变量栈空间
+else_8:
+end_9:
+  LI -6              ; 加载变量 product
+  push eax        ; 参数1入栈
+  ; print(1个参数)
+  PRT             ; 系统调用print
+  add esp, 1      ; 清理栈参数
+  ; Expression result in eax
+  add esp, 2            ; 释放块级变量栈空间
+continue_6:
+  LI -4              ; 加载变量 j
+  push eax              ; 保存左操作数到栈
+  mov eax, 1         ; 加载常量 1
+  mov ebx, eax          ; 右操作数到ebx
+  pop eax               ; 从栈恢复左操作数
+  add eax, ebx          ; 执行加法
+  SI -4             ; 存储到变量 j
+  ; Expression result in eax
+  jmp loop_4
+end_5:
+break_7:
   mov eax, 0         ; 加载常量 0
   mov esp, ebp             ; 恢复栈指针
   pop ebp                  ; 恢复调用者BP

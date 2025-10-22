@@ -1,0 +1,32 @@
+# 测试正常情况
+int func(int x) {
+  int a = 10;
+  int a1 = 100;
+  let a2 = 77;
+  print(a2);
+  
+  if (x < 0) {
+    let b = 20;
+    print(b);
+    let c = 30;
+    print(c);
+    int d = 15;
+    print(d);
+    print(a);
+    a = 40;
+  } else {
+    a = 60;
+    let e1 = 101;
+    int e = 10;
+    print(10);
+  }
+  
+  print(a);
+  return a;
+}
+
+int main() {
+  int result = func(5);
+  print(result);
+  return 0;
+}

@@ -1,0 +1,11 @@
+# 测试重复声明检测
+int func(int x) {
+  int a = 10;
+  int a = 20;  # 重复声明，应该报错
+  return a;
+}
+
+int main() {
+  int result = func(5);
+  return 0;
+}

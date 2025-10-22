@@ -6,41 +6,94 @@ import type { Token } from './lexer';
 import { TokenType, DataType } from './types';
 import type { ParseResult, ParseError, ParseContext, Scope, VariableInfo, FunctionInfo } from './types';
 import { 
-  ASTFactory
+  ASTFactory,
+  type LetDeclaration,
+  type VariableDeclaration,
+  type ExpressionStatement,
+  type AssignmentStatement,
+  type IfStatement,
+  type WhileStatement,
+  type ForStatement,
+  type ReturnStatement,
+  type BlockStatement,
+  type Identifier,
+  type BinaryExpression,
+  type UnaryExpression,
+  type FunctionCall,
+  type Program, 
+  type Statement, 
+  type Expression, 
+  type NumberLiteral, 
+  type ParenthesizedExpression,
+  type BreakStatement,
+  type ContinueStatement,
+  type EmptyStatement,
+  type FunctionDeclaration
 } from './ast';
-import type { 
-  Program, 
-  Statement, 
-  Expression, 
-  NumberLiteral, 
-  Identifier, 
-  BinaryExpression, 
-  UnaryExpression, 
-  FunctionCall, 
-  ParenthesizedExpression,
-  ExpressionStatement,
-  AssignmentStatement,
-  VariableDeclaration,
-  FunctionDeclaration,
-  IfStatement,
-  WhileStatement,
-  ForStatement,
-  ReturnStatement,
-  BreakStatement,
-  ContinueStatement,
-  BlockStatement,
-  EmptyStatement
-} from './ast';
+
+// TDZ 检查器类
+class TDZChecker {
+  private letVariables = new Set<string>();
+  private currentFunctionLetVars = new Set<string>();
+  private letDeclarations = new Map<string, number>(); // 变量名 -> 声明位置
+  
+  // 开始检查新函数
+  startFunction(): void {
+    this.currentFunctionLetVars.clear();
+    this.letDeclarations.clear();
+  }
+  
+  // 扫描函数中的所有 let 声明
+  scanLetDeclarations(statements: Statement[]): void {
+    for (const statement of statements) {
+      if (statement.type === 'LetDeclaration') {
+        const letDecl = statement as LetDeclaration;
+        // 所有 let 变量都加入 TDZ（不管是否有初始化表达式）
+        this.currentFunctionLetVars.add(letDecl.name);
+      }
+    }
+  }
+  
+  // 记录 let 声明的位置
+  recordLetDeclaration(varName: string, position: number): void {
+    this.letDeclarations.set(varName, position);
+  }
+  
+  // 检查变量访问
+  checkVariableAccess(varName: string, accessPosition: number): void {
+    // 如果是 let 变量但还未声明，报错
+    if (this.currentFunctionLetVars.has(varName)) {
+      throw new Error(`Cannot access '${varName}' before initialization`);
+    }
+  }
+  
+  // 标记 let 变量声明
+  markLetVariable(varName: string): void {
+    this.currentFunctionLetVars.add(varName);
+  }
+  
+  // 标记变量为已初始化（从 TDZ 中移除）
+  markVariableInitialized(varName: string): void {
+    this.currentFunctionLetVars.delete(varName);
+  }
+}
 
 export class StatementParser {
   private lexer: StatementLexer;
   private errors: ParseError[] = [];
   private warnings: ParseError[] = [];
   private context: ParseContext;
+  private tdzChecker: TDZChecker; // 添加 TDZ 检查器
 
   constructor(source: string) {
     this.lexer = new StatementLexer(source);
     this.context = this.createInitialContext();
+    this.tdzChecker = new TDZChecker(); // 初始化 TDZ 检查器
+  }
+
+  // 获取解析器上下文
+  public getContext(): ParseContext {
+    return this.context;
   }
 
   private createInitialContext(): ParseContext {
@@ -102,6 +155,8 @@ export class StatementParser {
           }
         }
         return this.parseVariableDeclaration();
+      case TokenType.LET:
+        return this.parseLetDeclaration();
       case TokenType.FUNCTION:
         return this.parseFunctionDeclaration();
       case TokenType.IF:
@@ -169,6 +224,45 @@ export class StatementParser {
     return ASTFactory.createVariableDeclaration(name, dataType, initializer);
   }
 
+  private parseLetDeclaration(): LetDeclaration {
+    this.lexer.advance(); // 跳过 'let'
+    const name = this.parseIdentifierName(); // let 后直接跟标识符
+    
+    // 立即将变量添加到作用域，标记为 TDZ
+    this.context.currentScope.variables.set(name, {
+      name,
+      type: DataType.INT,
+      value: undefined,
+      isInitialized: false,
+      isTDZ: true
+    });
+    
+    let initializer: Expression | undefined;
+    if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
+      this.lexer.advance();
+      initializer = this.parseExpression();
+      
+      // 如果有初始化表达式，更新变量状态
+      this.context.currentScope.variables.set(name, {
+        name,
+        type: DataType.INT,
+        value: this.evaluateExpression(initializer),
+        isInitialized: true,
+        isTDZ: false
+      });
+      
+      // 有初始化表达式，从 TDZ 中移除
+      this.tdzChecker.markVariableInitialized(name);
+    } else {
+      // 没有初始化表达式，保持 TDZ 状态
+      // this.tdzChecker.markLetVariable(name);
+    }
+
+    this.expectSemicolon();
+
+    return ASTFactory.createLetDeclaration(name, DataType.INT, initializer);
+  }
+
   private parseFunctionDeclaration(): FunctionDeclaration {
     // 支持两种语法：
     // 1. function name() { ... }
@@ -194,6 +288,50 @@ export class StatementParser {
     this.expect(TokenType.LEFTPAREN);
     const parameters = this.parseParameterList();
     this.expect(TokenType.RIGHTPAREN);
+    
+    // 开始新函数的 TDZ 检查
+    this.tdzChecker.startFunction();
+    
+    // 先扫描函数体中的所有 let 声明（不解析）
+    const savedPosition = this.lexer.getCurrentPosition();
+    this.expect(TokenType.LBRACE);
+    
+    // 扫描函数体中的 let 声明
+    let depth = 1;
+    while (depth > 0) {
+      const token = this.lexer.getCurrentToken();
+      if (!token) break;
+      
+      if (token.type === TokenType.LBRACE) {
+        depth++;
+      } else if (token.type === TokenType.RBRACE) {
+        depth--;
+        if (depth === 0) break;
+      } else if (token.type === TokenType.LET) {
+        this.lexer.advance(); // 跳过 let
+        const varName = this.parseIdentifierName();
+        
+        // 所有 let 变量都加入 TDZ（不管是否有初始化表达式）
+        this.tdzChecker.markLetVariable(varName);
+        
+        // 跳过初始化部分
+        if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
+          this.lexer.advance(); // 跳过 =
+          this.skipExpression(); // 跳过表达式
+        }
+        
+        // 跳过分号
+        if (this.lexer.getCurrentToken()?.type === TokenType.SEMICOLON) {
+          this.lexer.advance();
+        }
+        continue;
+      }
+      
+      this.lexer.advance();
+    }
+    
+    // 恢复位置
+    this.lexer.setPosition(savedPosition);
     
     const body = this.parseBlockStatement();
 
@@ -520,8 +658,22 @@ export class StatementParser {
       throw new Error(`Expected identifier, got ${token?.type || 'EOF'}`);
     }
     
+    const varName = token.value as string;
+    
+    // 编译时 TDZ 检查
+    try {
+      this.tdzChecker.checkVariableAccess(varName, token.position || 0);
+    } catch (error) {
+      this.errors.push({
+        message: (error as Error).message,
+        position: token.position || 0,
+        line: token.line || 1,
+        column: token.column || 1
+      });
+    }
+    
     this.lexer.advance();
-    return ASTFactory.createIdentifier(token.value as string);
+    return ASTFactory.createIdentifier(varName);
   }
 
   private parseIdentifierName(): string {
@@ -591,6 +743,45 @@ export class StatementParser {
     });
   }
 
+  private scanLetDeclarations(): void {
+    // 保存当前位置
+    const savedPosition = this.lexer.getCurrentPosition();
+    
+    // 扫描函数体，查找所有 let 声明
+    this.expect(TokenType.LBRACE);
+    
+    while (this.lexer.getCurrentToken()?.type !== TokenType.RBRACE && !this.lexer.isAtEnd()) {
+      const token = this.lexer.getCurrentToken();
+      if (token?.type === TokenType.LET) {
+        // 找到 let 声明，立即添加到作用域
+        this.lexer.advance(); // 跳过 'let'
+        const name = this.parseIdentifierName();
+        
+        // 添加到作用域，标记为 TDZ
+        this.context.currentScope.variables.set(name, {
+          name,
+          type: DataType.INT,
+          value: undefined,
+          isInitialized: false,
+          isTDZ: true
+        });
+        
+        // 跳过初始化表达式和分号
+        if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
+          this.lexer.advance();
+          this.parseExpression(); // 跳过表达式
+        }
+        this.expectSemicolon();
+      } else {
+        // 跳过其他语句
+        this.parseStatement();
+      }
+    }
+    
+    // 恢复位置
+    this.lexer.setPosition(savedPosition);
+  }
+
   private evaluateExpression(expression: Expression): any {
     switch (expression.type) {
       case 'NumberLiteral':
@@ -631,6 +822,83 @@ export class StatementParser {
         }
       default:
         return 0;
+    }
+  }
+
+  // 扫描函数体中的所有 let 声明，预先添加到 TDZ
+  private scanLetDeclarationsInFunction(): void {
+    // 保存当前位置
+    const savedPosition = this.lexer.getCurrentPosition();
+    
+    // 查找左大括号
+    while (this.lexer.getCurrentToken()?.type !== TokenType.LBRACE) {
+      this.lexer.advance();
+    }
+    this.lexer.advance(); // 跳过左大括号
+    
+    // 扫描函数体中的 let 声明
+    let depth = 1; // 大括号深度
+    while (depth > 0) {
+      const token = this.lexer.getCurrentToken();
+      if (!token) break;
+      
+      if (token.type === TokenType.LBRACE) {
+        depth++;
+      } else if (token.type === TokenType.RBRACE) {
+        depth--;
+        if (depth === 0) break; // 到达函数结束
+      } else if (token.type === TokenType.LET) {
+        // 找到 let 声明
+        this.lexer.advance(); // 跳过 let
+        const varName = this.parseIdentifierName();
+        
+        // 添加到作用域，标记为 TDZ
+        this.context.currentScope.variables.set(varName, {
+          name: varName,
+          type: DataType.INT,
+          value: undefined,
+          isInitialized: false,
+          isTDZ: true
+        });
+        
+        // 跳过初始化部分
+        if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
+          this.lexer.advance(); // 跳过 =
+          this.skipExpression(); // 跳过表达式
+        }
+        
+        // 跳过分号
+        if (this.lexer.getCurrentToken()?.type === TokenType.SEMICOLON) {
+          this.lexer.advance();
+        }
+        continue; // 不要再次 advance
+      }
+      
+      this.lexer.advance();
+    }
+    
+    // 恢复位置
+    this.lexer.setPosition(savedPosition);
+  }
+
+  // 跳过表达式（用于扫描时）
+  private skipExpression(): void {
+    const token = this.lexer.getCurrentToken();
+    if (!token) return;
+    
+    switch (token.type) {
+      case TokenType.NUMBER:
+      case TokenType.IDENTIFIER:
+        this.lexer.advance();
+        break;
+      case TokenType.LEFTPAREN:
+        this.lexer.advance();
+        this.skipExpression();
+        this.expect(TokenType.RIGHTPAREN);
+        break;
+      default:
+        this.lexer.advance();
+        break;
     }
   }
 }

@@ -74,6 +74,13 @@ export interface VariableDeclaration extends ASTNode {
   initializer?: Expression;
 }
 
+export interface LetDeclaration extends ASTNode {
+  type: 'LetDeclaration';
+  name: string;
+  dataType: DataType;
+  initializer?: Expression;
+}
+
 export interface FunctionDeclaration extends ASTNode {
   type: 'FunctionDeclaration';
   name: string;
@@ -130,6 +137,7 @@ export type Statement =
   | ExpressionStatement
   | AssignmentStatement
   | VariableDeclaration
+  | LetDeclaration
   | FunctionDeclaration
   | IfStatement
   | WhileStatement
@@ -248,6 +256,21 @@ export class ASTFactory {
   ): VariableDeclaration {
     return {
       type: 'VariableDeclaration',
+      name,
+      dataType,
+      initializer,
+      position
+    };
+  }
+
+  static createLetDeclaration(
+    name: string, 
+    dataType: DataType, 
+    initializer?: Expression, 
+    position?: number
+  ): LetDeclaration {
+    return {
+      type: 'LetDeclaration',
       name,
       dataType,
       initializer,
@@ -386,6 +409,7 @@ export interface ASTVisitor<T> {
   visitExpressionStatement(node: ExpressionStatement): T;
   visitAssignmentStatement(node: AssignmentStatement): T;
   visitVariableDeclaration(node: VariableDeclaration): T;
+  visitLetDeclaration(node: LetDeclaration): T;
   visitFunctionDeclaration(node: FunctionDeclaration): T;
   visitIfStatement(node: IfStatement): T;
   visitWhileStatement(node: WhileStatement): T;

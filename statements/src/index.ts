@@ -13,6 +13,7 @@ import type {
   ExpressionStatement,
   AssignmentStatement,
   VariableDeclaration,
+  LetDeclaration,
   FunctionDeclaration,
   IfStatement,
   WhileStatement,
@@ -35,6 +36,7 @@ export class StatementInterpreter {
   private returnValue: any = undefined;
   private shouldBreak = false;
   private shouldContinue = false;
+  private tdzVars: Set<string> = new Set(); // TDZ 变量跟踪
 
   constructor() {
     this.setupBuiltinFunctions();
@@ -117,6 +119,9 @@ export class StatementInterpreter {
       case 'VariableDeclaration':
         this.executeVariableDeclaration(statement as VariableDeclaration);
         break;
+      case 'LetDeclaration':
+        this.executeLetDeclaration(statement as LetDeclaration);
+        break;
       case 'FunctionDeclaration':
         this.executeFunctionDeclaration(statement as FunctionDeclaration);
         break;
@@ -164,6 +169,20 @@ export class StatementInterpreter {
       this.variables.set(statement.name, value);
     } else {
       this.variables.set(statement.name, 0); // 默认值
+    }
+  }
+
+  private executeLetDeclaration(statement: LetDeclaration): void {
+    // 将变量添加到 TDZ 集合（在初始化之前）
+    this.tdzVars.add(statement.name);
+    
+    if (statement.initializer) {
+      const value = this.evaluateExpression(statement.initializer);
+      this.variables.set(statement.name, value);
+      this.tdzVars.delete(statement.name); // 初始化后移除 TDZ
+    } else {
+      this.variables.set(statement.name, 0); // 默认值
+      this.tdzVars.delete(statement.name); // 初始化后移除 TDZ
     }
   }
 
@@ -261,6 +280,12 @@ export class StatementInterpreter {
         
       case 'Identifier':
         const varName = (expression as Identifier).name;
+        
+        // 检查 TDZ
+        if (this.tdzVars.has(varName)) {
+          throw new Error(`Cannot access '${varName}' before initialization`);
+        }
+        
         if (this.variables.has(varName)) {
           return this.variables.get(varName);
         } else {
@@ -382,6 +407,7 @@ export class StatementInterpreter {
     this.returnValue = undefined;
     this.shouldBreak = false;
     this.shouldContinue = false;
+    this.tdzVars.clear(); // 清空 TDZ 集合
     this.setupBuiltinFunctions();
   }
 
@@ -407,7 +433,11 @@ async function generateStepFiles(source: string): Promise<void> {
   const parser = new StatementParser(filteredSource);
   const parseResult = parser.parse();
   if (parseResult.errors && parseResult.errors.length > 0) {
-    // 解析失败则不生成后续步骤
+    // 显示解析错误
+    console.log("Parse Errors:");
+    parseResult.errors.forEach(error => {
+      console.log(`  ${error.message}`);
+    });
     return;
   }
   const program = parseResult.ast as any as Program;
@@ -419,6 +449,7 @@ ${JSON.stringify(program, null, 2)}`;
 
   // 代码生成
   const generator = new StatementCodeGenerator();
+  generator.setParserContext(parser.getContext()); // 设置解析器上下文
   const gen = generator.generate(program);
   const asm = gen.code || '';
 
@@ -493,7 +524,7 @@ ${asm}`;
 }
 
 // 生成 step3 风格的汇编并写入 statements/assemble.txt
-async function generateAssembleFile(source: string): Promise<void> {
+async function generateAssembleFile(source: string): Promise<boolean> {
   // 过滤掉注释行（以 # 开头的行）
   const filteredSource = source.split('\n')
     .filter(line => !line.trim().startsWith('#'))
@@ -504,20 +535,31 @@ async function generateAssembleFile(source: string): Promise<void> {
   const parseResult = parser.parse();
   if (parseResult.errors && parseResult.errors.length > 0) {
     // 解析失败则不生成
-    return;
+    return false;
   }
   const program = parseResult.ast as any as Program;
 
   // 代码生成
   const generator = new StatementCodeGenerator();
+  generator.setParserContext(parser.getContext()); // 设置解析器上下文
   const gen = generator.generate(program);
+  
+  // 检查代码生成错误
+  if (gen.errors && gen.errors.length > 0) {
+    console.log("Code Generation Errors:");
+    gen.errors.forEach(error => {
+      console.log(`  ${error.message}`);
+    });
+    return false;
+  }
+  
   const asm = gen.code || '';
 
   // 开关：ASM_OUTPUT=raw 则输出原始汇编（含段声明/标签等）；默认输出 step3 风格
   const outputMode = process.env.ASM_OUTPUT || 'step3';
   if (outputMode === 'raw') {
-    await Bun.write('statements/assemble.txt', asm + '\n');
-    return;
+    await Bun.write('assemble.txt', asm + '\n');
+    return true;
   }
 
   // 按 step3 规则转换：
@@ -577,7 +619,8 @@ async function generateAssembleFile(source: string): Promise<void> {
   });
 
   const formatted = replaced.map((instr, i) => `[${i}]: ${instr}`).join('\n') + '\n';
-  await Bun.write('statements/assemble.txt', formatted);
+  await Bun.write('assemble.txt', formatted);
+  return true;
 }
 
 // 主函数
@@ -606,6 +649,7 @@ async function main(): Promise<void> {
     
     // 检查是否需要生成步骤文件
     const generateSteps = process.env.GENERATE_STEPS === 'true';
+    let codeGenSuccess = false;
     
     if (generateSteps) {
       // 生成三个步骤文件
@@ -616,17 +660,24 @@ async function main(): Promise<void> {
       console.log("  - step1.txt: 原始汇编代码");
       console.log("  - step2.txt: 索引化 + 标签备注");
       console.log("  - step3.txt: 标签替换为数值索引");
+      codeGenSuccess = true; // 假设步骤文件生成成功
     } else {
       // 生成 assemble.txt（step3 风格）
-      await generateAssembleFile(filteredInput);
-      console.log("Assemble written to statements/assemble.txt");
+      codeGenSuccess = await generateAssembleFile(filteredInput);
+      if (codeGenSuccess) {
+        console.log("Assemble written to statements/assemble.txt");
+      }
     }
     
-    if (result.errors.length > 0) {
-      console.log("Errors:");
-      result.errors.forEach(error => {
-        console.log(`  ${error.message} at line ${error.line}, column ${error.column}`);
-      });
+    // 检查是否有任何错误（解释器错误或代码生成错误）
+    if (result.errors.length > 0 || !codeGenSuccess) {
+      if (result.errors.length > 0) {
+        console.log("Errors:");
+        result.errors.forEach(error => {
+          console.log(`  ${error.message} at line ${error.line}, column ${error.column}`);
+        });
+      }
+      // 代码生成错误已经在 generateAssembleFile 中输出了
     } else {
       console.log("Execution completed successfully!");
       

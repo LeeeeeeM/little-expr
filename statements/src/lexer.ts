@@ -29,6 +29,7 @@ export class StatementLexer {
     ['break', TokenType.BREAK],
     ['continue', TokenType.CONTINUE],
     ['int', TokenType.INT],
+    ['let', TokenType.LET],
     ['function', TokenType.FUNCTION],
     ['true', TokenType.NUMBER],  // 布尔值true用数字1表示
     ['false', TokenType.NUMBER], // 布尔值false用数字0表示
@@ -377,6 +378,14 @@ export class StatementLexer {
 
   public reset(): void {
     this.currentIndex = 0;
+  }
+
+  public getCurrentPosition(): number {
+    return this.currentIndex;
+  }
+
+  public setPosition(position: number): void {
+    this.currentIndex = position;
   }
 
   // 调试方法

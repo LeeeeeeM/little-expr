@@ -1,0 +1,41 @@
+# 测试 let 声明和 TDZ
+int func(int x) {
+  int a = 10;        # int 声明
+  int a1 = 100;
+  let a2 = 77;
+  print(a2);
+  
+  if (x < 0) {
+    let b = 20;      # let 声明
+    print(b);        # 应该正常打印 20
+    
+    # 测试 TDZ - 这应该会报错
+    # print(c);      # 注释掉，因为会编译错误
+    let c = 30;      # let 声明
+    print(c);        # 应该正常打印 30
+
+    int d = 15;
+    print(d);
+    
+    print(a);        # 访问外层变量
+
+    a = 40;
+  } else {
+    a = 60;
+    let e1 = 101;
+    int e = 10;
+    int e2 = 100;
+    // let e2 = 300;
+    int e4 = 1000;
+    print(10);
+  }
+  
+  print(a);
+  return a;
+}
+
+int main() {
+  int result = func(5);
+  print(result);
+  return 0;
+}

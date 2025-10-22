@@ -32,6 +32,9 @@ class ScopeManager {
   private functionParameters: string[] = []; // 函数参数列表
   private tdzVars: Set<string> = new Set(); // TDZ 变量集合
   private blockVariableCount = 0; // 当前块中的变量计数
+  private forLoopVariables: Map<string, number> = new Map(); // for循环变量
+  private inForLoop = false; // 是否在for循环中
+  private forLoopVariableOffset = 0; // for循环变量偏移计数器
   
   // 进入新作用域
   enterScope(): void {
@@ -120,6 +123,12 @@ class ScopeManager {
   
   // 查找变量
   getVariable(name: string): number | null {
+    // 首先检查for循环变量
+    const forLoopOffset = this.getForLoopVariable(name);
+    if (forLoopOffset !== null) {
+      return forLoopOffset;
+    }
+    
     // 从内层到外层查找
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       const scope = this.scopes[i];
@@ -145,11 +154,44 @@ class ScopeManager {
     this.functionParameters = [];
     this.tdzVars.clear();
     this.blockVariableCount = 0;
+    this.forLoopVariables.clear();
+    this.inForLoop = false;
+    this.forLoopVariableOffset = 0;
   }
   
   // 获取函数级变量数量
   getFunctionVariableCount(): number {
     return Math.abs(this.functionStackOffset);
+  }
+  
+  // 进入for循环作用域
+  enterForLoop(): void {
+    this.inForLoop = true;
+  }
+  
+  // 退出for循环作用域
+  exitForLoop(): void {
+    this.inForLoop = false;
+    this.forLoopVariables.clear();
+  }
+  
+  // 声明for循环变量
+  declareForLoopVariable(name: string): number {
+    // 检查是否已经声明过
+    if (this.forLoopVariables.has(name)) {
+      throw new Error(`for循环变量 '${name}' 已经在当前for循环中声明过`);
+    }
+    
+    // for循环变量使用独立的偏移空间，从-100开始，按顺序分配
+    const offset = -100 - this.forLoopVariableOffset;
+    this.forLoopVariableOffset++;
+    this.forLoopVariables.set(name, offset);
+    return offset;
+  }
+  
+  // 获取for循环变量
+  getForLoopVariable(name: string): number | null {
+    return this.forLoopVariables.get(name) || null;
   }
   
   // 获取块级变量数量
@@ -576,8 +618,22 @@ export class StatementCodeGenerator {
     this.continueStack.push(continueLabel);
     this.breakStack.push(breakLabel);
     
-    // 生成初始化
-    if (statement.init) {
+    // 进入for循环作用域
+    this.scopeManager.enterForLoop();
+    
+    // 生成初始化 - 如果是变量声明，需要特殊处理
+    if (statement.init && statement.init.type === 'VariableDeclaration') {
+      const varDecl = statement.init as VariableDeclaration;
+      // 声明for循环变量
+      const offset = this.scopeManager.declareForLoopVariable(varDecl.name);
+      this.variables.set(varDecl.name, `[ebp${offset}]`);
+      
+      // 生成初始化代码
+      if (varDecl.initializer) {
+        this.generateExpression(varDecl.initializer);
+        this.assemblyCode.push(`  SI ${offset}              ; 初始化for循环变量 ${varDecl.name}`);
+      }
+    } else if (statement.init) {
       this.generateStatement(statement.init);
     }
     
@@ -605,6 +661,9 @@ export class StatementCodeGenerator {
     this.assemblyCode.push(`  jmp ${loopLabel}`);
     this.assemblyCode.push(`${endLabel}:`);
     this.assemblyCode.push(`${breakLabel}:`); // 添加 break_target 标签
+    
+    // 退出for循环作用域
+    this.scopeManager.exitForLoop();
     
     // 弹出当前循环的标签
     this.continueStack.pop();

@@ -26,8 +26,5 @@ int main() {
     print(product);
   }
   
-  # 测试 TDZ - 这应该会报错
-  # print(undefined_var);  # 取消注释会报错
-  
   return 0;
 }

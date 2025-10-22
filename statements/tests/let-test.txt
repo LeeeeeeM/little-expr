@@ -3,6 +3,7 @@ int func(int x) {
   int a = 10;        # int 声明
   int a1 = 100;
   let a2 = 77;
+  int a3 = 1000;
   print(a2);
   
   if (x < 0) {

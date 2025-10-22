@@ -60,9 +60,9 @@ break_3:
   add esp, 1      ; 清理栈参数
   ; Expression result in eax
   mov eax, 0         ; 加载常量 0
-  SI -4              ; 初始化 j
+  SI -100              ; 初始化for循环变量 j
 loop_4:
-  LI -4              ; 加载变量 j
+  LI -100              ; 加载变量 j
   push eax              ; 保存左操作数到栈
   mov eax, 3         ; 加载常量 3
   mov ebx, eax          ; 右操作数到ebx
@@ -70,21 +70,21 @@ loop_4:
   cmp eax, ebx          ; 比较操作数
   jge end_5
   sub esp, 2            ; 为2个块级变量分配栈空间
-  LI -4              ; 加载变量 j
+  LI -100              ; 加载变量 j
   push eax              ; 保存左操作数到栈
   mov eax, 1         ; 加载常量 1
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   add eax, ebx          ; 执行加法
-  SI -5              ; 初始化 let multiplier
+  SI -3              ; 初始化 let multiplier
   LI -1              ; 加载变量 sum
   push eax              ; 保存左操作数到栈
-  LI -5              ; 加载变量 multiplier
+  LI -3              ; 加载变量 multiplier
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   imul eax, ebx         ; 执行乘法
-  SI -6              ; 初始化 product
-  LI -6              ; 加载变量 product
+  SI -4              ; 初始化 product
+  LI -4              ; 加载变量 product
   push eax              ; 保存左操作数到栈
   mov eax, 30         ; 加载常量 30
   mov ebx, eax          ; 右操作数到ebx
@@ -93,18 +93,18 @@ loop_4:
   jle else_8
   sub esp, 1            ; 为1个块级变量分配栈空间
   mov eax, 10         ; 加载常量 10
-  SI -7              ; 初始化 let bonus
-  LI -6              ; 加载变量 product
+  SI -3              ; 初始化 let bonus
+  LI -4              ; 加载变量 product
   push eax              ; 保存左操作数到栈
-  LI -7              ; 加载变量 bonus
+  LI -3              ; 加载变量 bonus
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   add eax, ebx          ; 执行加法
-  SI -6              ; 存储到 product
+  SI -4              ; 存储到 product
   add esp, 1            ; 释放块级变量栈空间
 else_8:
 end_9:
-  LI -6              ; 加载变量 product
+  LI -4              ; 加载变量 product
   push eax        ; 参数1入栈
   ; print(1个参数)
   PRT             ; 系统调用print
@@ -112,13 +112,13 @@ end_9:
   ; Expression result in eax
   add esp, 2            ; 释放块级变量栈空间
 continue_6:
-  LI -4              ; 加载变量 j
+  LI -100              ; 加载变量 j
   push eax              ; 保存左操作数到栈
   mov eax, 1         ; 加载常量 1
   mov ebx, eax          ; 右操作数到ebx
   pop eax               ; 从栈恢复左操作数
   add eax, ebx          ; 执行加法
-  SI -4             ; 存储到变量 j
+  SI -100             ; 存储到变量 j
   ; Expression result in eax
   jmp loop_4
 end_5:

@@ -1,0 +1,12 @@
+# 测试综合计算
+int main() {
+  int sum = 20;
+  
+  for (int j = 0; j < 3; j = j + 1) {
+    int multiplier = j + 1;
+    int product = sum * multiplier;
+    print(product);
+  }
+  
+  return 0;
+}

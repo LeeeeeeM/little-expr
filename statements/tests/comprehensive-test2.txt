@@ -5,7 +5,7 @@ int main() {
   
   # while 循环测试
   while (i < 5) {
-    let temp = i * 2;  # let 变量在块级作用域
+    int temp = i * 2;  # 改为int变量
     sum = sum + temp;
     i = i + 1;
   }
@@ -14,12 +14,12 @@ int main() {
   
   # for 循环测试
   for (int j = 0; j < 3; j = j + 1) {
-    let multiplier = j + 1;  # let 变量在 for 循环块中
+    int multiplier = j + 1;  # 改为int变量
     int product = sum * multiplier;
     
     # 嵌套块级作用域
     if (product > 30) {
-      let bonus = 10;  # let 变量在 if 块中
+      int bonus = 10;  # 改为int变量
       product = product + bonus;
     }
     

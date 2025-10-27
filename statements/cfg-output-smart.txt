@@ -1,5 +1,5 @@
 CFG生成报告
-生成时间: 10/27/2025, 11:31:37 AM
+生成时间: 10/27/2025, 11:31:39 AM
 函数数量: 4
 ============================================================
 
@@ -147,33 +147,33 @@ CFG生成报告
   语句:
     - 返回语句
   前驱块: complexFunction_block_2
-  后继块: complexFunction_block_1, complexFunction_block_12
+  后继块: complexFunction_block_1
 
 基本块: complexFunction_block_1
   [出口块]
   语句:
     - (空)
-  前驱块: complexFunction_block_6, complexFunction_block_8, complexFunction_block_11, complexFunction_block_12
+  前驱块: complexFunction_block_6, complexFunction_block_8, complexFunction_block_11, complexFunction_block_9
   后继块: 无
-
-基本块: complexFunction_block_12
-  语句:
-    - 声明let变量 c
-    - 赋值 c = 变量: c * 数字: 2
-  前驱块: complexFunction_block_11, complexFunction_block_6, complexFunction_block_8
-  后继块: complexFunction_block_1
 
 基本块: complexFunction_block_6
   语句:
     - 返回语句
   前驱块: complexFunction_block_4
-  后继块: complexFunction_block_1, complexFunction_block_12
+  后继块: complexFunction_block_1, complexFunction_block_9
 
 基本块: complexFunction_block_8
   语句:
     - 返回语句
   前驱块: complexFunction_block_4
-  后继块: complexFunction_block_1, complexFunction_block_12
+  后继块: complexFunction_block_1, complexFunction_block_9
+
+基本块: complexFunction_block_9
+  语句:
+    - 声明let变量 c
+    - 赋值 c = 变量: c * 数字: 2
+  前驱块: complexFunction_block_6, complexFunction_block_8
+  后继块: complexFunction_block_1
 
 控制流边:
   complexFunction_entry_block → complexFunction_block_2
@@ -182,12 +182,11 @@ CFG生成报告
   complexFunction_block_4 → complexFunction_block_6
   complexFunction_block_4 → complexFunction_block_8
   complexFunction_block_11 → complexFunction_block_1
-  complexFunction_block_11 → complexFunction_block_12
-  complexFunction_block_12 → complexFunction_block_1
   complexFunction_block_6 → complexFunction_block_1
-  complexFunction_block_6 → complexFunction_block_12
+  complexFunction_block_6 → complexFunction_block_9
   complexFunction_block_8 → complexFunction_block_1
-  complexFunction_block_8 → complexFunction_block_12
+  complexFunction_block_8 → complexFunction_block_9
+  complexFunction_block_9 → complexFunction_block_1
 
 
 ============================================================

@@ -1,0 +1,33 @@
+// 明显的智能合并测试用例
+
+function earlyReturnFunction() {
+    let x = 10;
+    
+    if (x > 5) {
+        return x * 2;  // 直接返回
+    }
+    
+    // 只有else分支会执行到这里
+    x = 100;
+    let y = x + 1;
+
+    {
+      let z = 111;
+    }
+    return y;
+}
+
+function normalIfFunction() {
+    let a = 5;
+    let b = 10;
+    
+    if (a > 3) {
+        b = a * 2;
+    } else {
+        b = a + 1;
+    }
+    
+    // 后续代码会执行
+    let c = b + 5;
+    return c;
+}

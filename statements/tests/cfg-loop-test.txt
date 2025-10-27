@@ -1,0 +1,45 @@
+// while 和 for 智能合并测试用例
+
+function whileReturnFunction() {
+    let i = 0;
+    
+    while (i < 10) {
+        if (i > 5) {
+            return i;  // 总是返回
+        }
+        i = i + 1;
+    }
+    
+    // 死代码 - 永远不会执行
+    let x = 100;
+    return x;
+}
+
+function forReturnFunction() {
+    let total = 0;
+    let i = 0;
+    
+    for (i = 0; i < 5; i = i + 1) {
+        if (i > 2) {
+            return total;  // 总是返回
+        }
+        total = total + i;
+    }
+    
+    // 死代码 - 永远不会执行
+    let y = 200;
+    return y;
+}
+
+function normalWhileFunction() {
+    let sum = 0;
+    let i = 0;
+    
+    while (i < 5) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    
+    // 后续代码会执行
+    return sum;
+}

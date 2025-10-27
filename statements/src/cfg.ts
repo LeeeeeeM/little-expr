@@ -56,8 +56,10 @@ export class CFGGenerator {
   private currentFunctionName: string = '';
   private currentFunctionExitBlock: BasicBlock | null = null;
   private loopStack: { breakTarget: BasicBlock; continueTarget: BasicBlock }[] = [];
+  private smartMerging: boolean = false; // 智能合并开关
 
-  public generate(program: Program): ControlFlowGraph[] {
+  public generate(program: Program, smartMerging: boolean = false): ControlFlowGraph[] {
+    this.smartMerging = smartMerging;
     const cfgs: ControlFlowGraph[] = [];
     for (const stmt of program.statements) {
       if (stmt.type === 'FunctionDeclaration') {
@@ -85,6 +87,16 @@ export class CFGGenerator {
     if (!to.predecessors.includes(from)) {
       to.predecessors.push(from);
     }
+  }
+
+  private endsWithReturn(block: BasicBlock): boolean {
+    // 检查块是否以return语句结束
+    if (block.statements.length === 0) {
+      return false;
+    }
+    
+    const lastStatement = block.statements[block.statements.length - 1]!;
+    return lastStatement.type === 'ReturnStatement';
   }
 
   private generateFunctionCFG(funcDecl: FunctionDeclaration): ControlFlowGraph {
@@ -281,7 +293,36 @@ export class CFGGenerator {
       elseExit = conditionBlock; // If no else, false branch goes to merge
     }
 
-    // 合并块
+    // 智能合并逻辑
+    if (this.smartMerging) {
+      // 检查两个分支是否都直接返回
+      const thenReturns = this.endsWithReturn(thenExit);
+      const elseReturns = ifStmt.elseBranch ? this.endsWithReturn(elseExit) : false;
+
+      if (thenReturns && elseReturns) {
+        // 两个分支都返回，不需要合并块
+        // 但是需要创建一个虚拟的合并块来保持死代码的独立性
+        const mergeBlock = this.newBlock();
+        blocks.push(mergeBlock);
+        
+        // 两个分支都连接到合并块（虽然不会执行到）
+        this.connectBlocks(thenExit, mergeBlock);
+        this.connectBlocks(elseExit, mergeBlock);
+        
+        // 合并块不连接到任何地方，保持死代码的独立性
+        return { blocks, entry: currentBlock, exit: mergeBlock };
+      } else if (thenReturns && !elseReturns) {
+        // then分支返回，else分支不返回，else分支继续执行
+        this.connectBlocks(thenExit, this.currentFunctionExitBlock!);
+        return { blocks, entry: currentBlock, exit: elseExit };
+      } else if (!thenReturns && elseReturns) {
+        // else分支返回，then分支不返回，then分支继续执行
+        this.connectBlocks(elseExit, this.currentFunctionExitBlock!);
+        return { blocks, entry: currentBlock, exit: thenExit };
+      }
+    }
+
+    // 默认行为：创建合并块
     const mergeBlock = this.newBlock();
     blocks.push(mergeBlock);
     this.connectBlocks(thenExit, mergeBlock);
@@ -323,9 +364,18 @@ export class CFGGenerator {
     );
     blocks.push(...bodyBlocks);
 
-    this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
-    this.connectBlocks(bodyExit, loopHeader); // Loop back to header
-    this.connectBlocks(loopHeader, loopExit); // False branch to exit
+    // 智能合并逻辑：检查循环体是否总是返回
+    if (this.smartMerging && this.endsWithReturn(bodyExit)) {
+      // 循环体总是返回，不需要循环回退
+      this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
+      this.connectBlocks(loopHeader, loopExit); // False branch to exit
+      // 不连接 bodyExit 到 loopHeader，因为总是返回
+    } else {
+      // 正常循环逻辑
+      this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
+      this.connectBlocks(bodyExit, loopHeader); // Loop back to header
+      this.connectBlocks(loopHeader, loopExit); // False branch to exit
+    }
 
     this.loopStack.pop();
     return { blocks, entry: currentBlock, exit: loopExit };
@@ -373,11 +423,19 @@ export class CFGGenerator {
     );
     blocks.push(...bodyBlocks);
 
-    // Connections
-    this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
-    this.connectBlocks(bodyExit, loopUpdate); // Body to update
-    this.connectBlocks(loopUpdate, loopHeader); // Update back to header
-    this.connectBlocks(loopHeader, loopExit); // False branch to exit
+    // 智能合并逻辑：检查循环体是否总是返回
+    if (this.smartMerging && this.endsWithReturn(bodyExit)) {
+      // 循环体总是返回，不需要循环回退
+      this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
+      this.connectBlocks(loopHeader, loopExit); // False branch to exit
+      // 不连接 bodyExit 到 loopUpdate，因为总是返回
+    } else {
+      // 正常循环逻辑
+      this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
+      this.connectBlocks(bodyExit, loopUpdate); // Body to update
+      this.connectBlocks(loopUpdate, loopHeader); // Update back to header
+      this.connectBlocks(loopHeader, loopExit); // False branch to exit
+    }
 
     this.loopStack.pop();
     return { blocks, entry: currentBlock, exit: loopExit };

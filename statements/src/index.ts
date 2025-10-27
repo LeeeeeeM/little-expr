@@ -541,11 +541,12 @@ async function generateAssembleFile(source: string): Promise<boolean> {
   }
   const program = parseResult.ast as any as Program;
 
-  // CFG生成
-  console.log("🔧 生成CFG...");
-  const cfgGenerator = new CFGGenerator();
-  const cfgs = cfgGenerator.generate(program);
-  console.log(`📊 生成了 ${cfgs.length} 个函数的CFG`);
+          // CFG生成
+          console.log("🔧 生成CFG...");
+          const cfgGenerator = new CFGGenerator();
+          const smartMerging = process.argv.includes('--smart'); // 支持 --smart 参数
+          const cfgs = cfgGenerator.generate(program, smartMerging);
+          console.log(`📊 生成了 ${cfgs.length} 个函数的CFG (智能合并: ${smartMerging ? '开启' : '关闭'})`);
   
   // CFG可视化输出
   const visualizer = new CFGVisualizer();
@@ -557,7 +558,7 @@ async function generateAssembleFile(source: string): Promise<boolean> {
   
   for (let i = 0; i < cfgs.length; i++) {
     const cfg = cfgs[i]!;
-    const functionName = cfg.entryBlock.id.replace('_entry', '') || `function_${i}`;
+            const functionName = cfg.entryBlock.id.replace('_entry_block', '') || `function_${i}`;
     
     console.log(`  📋 处理函数: ${functionName}`);
     
@@ -569,9 +570,10 @@ async function generateAssembleFile(source: string): Promise<boolean> {
     cfgOutput += `\n`;
   }
   
-  // 保存CFG输出
-  await Bun.write('cfg-output.txt', cfgOutput);
-  console.log("✅ CFG输出已保存到: cfg-output.txt");
+          // 保存CFG输出
+          const outputFileName = smartMerging ? 'cfg-output-smart.txt' : 'cfg-output.txt';
+          await Bun.write(outputFileName, cfgOutput);
+          console.log(`✅ CFG输出已保存到: ${outputFileName}`);
 
   // 代码生成
   const generator = new StatementCodeGenerator();

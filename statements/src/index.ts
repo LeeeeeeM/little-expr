@@ -27,6 +27,8 @@ import type {
 
 // 在文件顶部补充导入代码生成器
 import { StatementCodeGenerator } from './separated';
+// 导入CFG相关模块
+import { CFGGenerator, CFGVisualizer } from './cfg';
 
 export class StatementInterpreter {
   private variables: Map<string, any> = new Map();
@@ -538,6 +540,38 @@ async function generateAssembleFile(source: string): Promise<boolean> {
     return false;
   }
   const program = parseResult.ast as any as Program;
+
+  // CFG生成
+  console.log("🔧 生成CFG...");
+  const cfgGenerator = new CFGGenerator();
+  const cfgs = cfgGenerator.generate(program);
+  console.log(`📊 生成了 ${cfgs.length} 个函数的CFG`);
+  
+  // CFG可视化输出
+  const visualizer = new CFGVisualizer();
+  let cfgOutput = '';
+  cfgOutput += `CFG生成报告\n`;
+  cfgOutput += `生成时间: ${new Date().toLocaleString()}\n`;
+  cfgOutput += `函数数量: ${cfgs.length}\n`;
+  cfgOutput += '='.repeat(60) + '\n\n';
+  
+  for (let i = 0; i < cfgs.length; i++) {
+    const cfg = cfgs[i]!;
+    const functionName = cfg.entryBlock.id.replace('_entry', '') || `function_${i}`;
+    
+    console.log(`  📋 处理函数: ${functionName}`);
+    
+    cfgOutput += `\n${'='.repeat(60)}\n`;
+    cfgOutput += `函数: ${functionName}\n`;
+    cfgOutput += `${'='.repeat(60)}\n\n`;
+    
+    cfgOutput += visualizer.visualize(cfg);
+    cfgOutput += `\n`;
+  }
+  
+  // 保存CFG输出
+  await Bun.write('cfg-output.txt', cfgOutput);
+  console.log("✅ CFG输出已保存到: cfg-output.txt");
 
   // 代码生成
   const generator = new StatementCodeGenerator();

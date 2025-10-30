@@ -1,0 +1,73 @@
+// 复杂CFG测试用例 - 验证修复的正确性
+
+function complexFunction() {
+    let a = 1;
+    let b = 2;
+    
+    if (a > 0) {
+        let c = 3;
+        if (b > 1) {
+            let d = 4;
+            return a + b + c + d;
+        } else {
+            let e = 5;
+            a = 10;
+        }
+    } else {
+        let f = 6;
+        b = 20;
+    }
+    
+    // 后续代码
+    let g = 7;
+    if (a > 5) {
+        let h = 8;
+        return g + h;
+    }
+    
+    let i = 9;
+    return i;
+}
+
+function nestedLoopsFunction() {
+    let x = 0;
+    
+    while (x < 3) {
+        let y = 0;
+        while (y < 2) {
+            if (x + y > 2) {
+                return x * y;
+            }
+            y = y + 1;
+        }
+        x = x + 1;
+    }
+    
+    // 后续代码
+    let z = 100;
+    return z;
+}
+
+function earlyReturnWithNestedBlocks() {
+    let base = 10;
+    
+    if (base > 5) {
+        return base * 2;
+    }
+    
+    // 只有else分支会执行到这里
+    let temp = base + 1;
+    
+    {
+        let inner1 = temp * 2;
+        {
+            let inner2 = inner1 + 1;
+            if (inner2 > 20) {
+                return inner2;
+            }
+        }
+    }
+    
+    let final = temp + 10;
+    return final;
+}

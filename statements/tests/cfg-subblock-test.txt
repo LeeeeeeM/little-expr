@@ -1,0 +1,23 @@
+// 子块信息测试用例
+
+function subBlockTest() {
+    let x = 10;
+    
+    if (x > 5) {
+        return x;
+    } else {
+        x = 100;
+    }
+    
+    // 明显的子块
+    {
+        let y = 20;
+        let z = 30;
+        {
+            let w = 40;
+            let w1 = 40;
+        }
+    }
+    
+    return x;
+}

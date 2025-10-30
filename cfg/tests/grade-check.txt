@@ -1,0 +1,46 @@
+int checkGrade() {
+    let grade = 0;
+    let score = 70;
+    {
+      let i = 0;
+      score = score + 1;
+    }
+    
+    if (score >= 90) {
+        grade = 1;  // A级
+        let bonusA = 10;
+        {
+          grade = 10;
+        }
+        grade = 111;
+    } else if (score >= 80) {
+      let bonusB = 5;
+      grade = 2;
+      let grade = 2;  // B级
+      {
+        grade = grade + 20;
+        let c = 100;
+      }
+      let cc = 1110;
+      cc = 222;
+    } else if (score >= 60) {
+      grade = 3; // C 级
+    }
+    let k = 9990;
+
+    if (k) {
+      let jj = 111;
+      {
+        let j = 1111;
+        if (j > 0) {
+          j = 222;
+        }
+        let j11= 1231;
+        {
+          let xx = 1;
+        }
+      }
+      let j111 = 123123;
+    }
+    return grade;
+}

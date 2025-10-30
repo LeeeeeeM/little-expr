@@ -1,0 +1,29 @@
+int test() {
+  let a = 0;
+  let b = 1;
+  let c = 10;
+  if (c > 5) {
+    let d = 6;
+    if (b > 2) {
+      let g = 1999;
+      d  = 7;
+    }
+    {
+      b = 10;
+      let c = 10;
+    }
+    let e = 7;
+  } else if (c < 10) {
+    let a = 10;
+  }
+
+  let d  = 100;
+
+  {
+    let d = 10001;
+    b = 2;
+    a = 100;
+  }
+
+  return a;
+}

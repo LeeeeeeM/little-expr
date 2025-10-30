@@ -19,23 +19,16 @@ import type {
   UnaryExpression,
   FunctionCall,
   EmptyStatement,
+  Expression,
+  ASTNode,
 } from './ast';
+import { StatementType } from './types';
 
-// 重新定义类型，保持兼容性
 export interface VariableInfo {
   name: string;
   type: string;
   offset?: number;
-  initializer?: any;
-}
-
-export interface SubBlockInfo {
-  startStatement: number;
-  endStatement: number;
-  variables: VariableInfo[];
-  scopeLevel: number;
-  blockStatement: BlockStatement | null;
-  scopeType: 'block' | 'branch' | 'loop' | 'function';
+  initializer?: Expression;
 }
 
 export interface BasicBlock {
@@ -45,13 +38,10 @@ export interface BasicBlock {
   successors: BasicBlock[];
   isEntry?: boolean;
   isExit?: boolean;
-  subBlocks?: SubBlockInfo[];
-  
-  // 新增：函数作用域变量（入口块特殊处理）
-  variables?: VariableInfo[];
 }
 
 export interface ControlFlowGraph {
+  functionName: string;
   entryBlock: BasicBlock;
   exitBlock?: BasicBlock;
   blocks: BasicBlock[];
@@ -73,11 +63,18 @@ export interface CFGAnalysis {
 }
 
 // 控制流语句类型
-const CONTROL_FLOW_STATEMENT_TYPES = ['IfStatement', 'WhileStatement', 'ForStatement', 'ReturnStatement', 'BreakStatement', 'ContinueStatement'];
+const CONTROL_FLOW_STATEMENT_TYPES = [
+  StatementType.IF_STATEMENT,
+  StatementType.WHILE_STATEMENT,
+  StatementType.FOR_STATEMENT,
+  StatementType.RETURN_STATEMENT,
+  StatementType.BREAK_STATEMENT,
+  StatementType.CONTINUE_STATEMENT
+];
 
 // 检查语句是否为控制流语句
 function isControlFlowStatement(stmt: Statement): boolean {
-  return CONTROL_FLOW_STATEMENT_TYPES.includes(stmt.type);
+  return CONTROL_FLOW_STATEMENT_TYPES.includes(stmt.type as StatementType);
 }
 
 export class CFGGenerator {
@@ -85,13 +82,11 @@ export class CFGGenerator {
   private currentFunctionName: string = '';
   private currentFunctionExitBlock: BasicBlock | null = null;
   private loopStack: { breakTarget: BasicBlock; continueTarget: BasicBlock }[] = [];
-  private smartMerging: boolean = false; // 智能合并开关
 
-  public generate(program: Program, smartMerging: boolean = false): ControlFlowGraph[] {
-    this.smartMerging = smartMerging;
+  public generate(program: Program): ControlFlowGraph[] {
     const cfgs: ControlFlowGraph[] = [];
     for (const stmt of program.statements) {
-      if (stmt.type === 'FunctionDeclaration') {
+      if (stmt.type === StatementType.FUNCTION_DECLARATION) {
         cfgs.push(this.generateFunctionCFG(stmt));
       }
     }
@@ -125,7 +120,7 @@ export class CFGGenerator {
     }
     
     const lastStatement = block.statements[block.statements.length - 1]!;
-    return lastStatement.type === 'ReturnStatement';
+    return lastStatement.type === StatementType.RETURN_STATEMENT;
   }
 
   private generateFunctionCFG(funcDecl: FunctionDeclaration): ControlFlowGraph {
@@ -183,6 +178,7 @@ export class CFGGenerator {
     const optimizedResult = this.optimizeCFG(Array.from(uniqueBlocks), edges, entryBlock, this.currentFunctionExitBlock!);
     
     return {
+      functionName: funcDecl.name,
       entryBlock: entryBlock,
       exitBlock: this.currentFunctionExitBlock,
       blocks: optimizedResult.blocks,
@@ -201,7 +197,7 @@ export class CFGGenerator {
     // 按照理论：线性执行到跳转点，合并连续语句
     for (const stmt of blockStmt.statements) {
       // 跳过空语句
-      if (stmt.type === 'EmptyStatement') {
+      if (stmt.type === StatementType.EMPTY_STATEMENT) {
         continue;
       }
       
@@ -215,7 +211,7 @@ export class CFGGenerator {
         
         // 关键修复：控制流语句后，创建新的基本块用于后续语句
         // 而不是将后续语句添加到控制流语句的出口块中
-        if (stmt.type === 'IfStatement' || stmt.type === 'WhileStatement' || stmt.type === 'ForStatement') {
+        if (stmt.type === StatementType.IF_STATEMENT || stmt.type === StatementType.WHILE_STATEMENT || stmt.type === StatementType.FOR_STATEMENT) {
           // 对于if/while/for语句，后续语句应该在新的基本块中
           const nextBlock = this.newBlock();
           blocks.push(nextBlock);
@@ -225,9 +221,21 @@ export class CFGGenerator {
           // 对于return/break/continue语句，直接使用stmtExit
           exitBlock = stmtExit;
         }
-      } else if (stmt.type === 'BlockStatement') {
-        // BlockStatement 作为语句添加，但会显示其内容
-        exitBlock.statements.push(stmt);
+      } else if (stmt.type === StatementType.BLOCK_STATEMENT) {
+        const innerBlock = stmt as BlockStatement;
+        const hasControlFlow = this.blockContainsControlFlow(innerBlock);
+        if (hasControlFlow) {
+          // 有控制流，递归分块
+          const { blocks: nestedBlocks, exit: nestedExit } = this.generateBlockCFG(innerBlock, exitBlock);
+          blocks.push(...nestedBlocks);
+          exitBlock = nestedExit;
+        } else {
+          // 无控制流，作为独立整体
+          const newBlock = this.newBlock([stmt]);
+          blocks.push(newBlock);
+          this.connectBlocks(exitBlock, newBlock);
+          exitBlock = newBlock;
+        }
       } else {
         // 简单语句：添加到当前块
         exitBlock.statements.push(stmt);
@@ -240,6 +248,13 @@ export class CFGGenerator {
     }
     
     return { blocks, entry: entryBlock, exit: exitBlock };
+  }
+
+  private blockContainsControlFlow(block: BlockStatement): boolean {
+    return block.statements.some(s =>
+      this.isControlFlowStatement(s) ||
+      (s.type === StatementType.BLOCK_STATEMENT && this.blockContainsControlFlow(s as BlockStatement))
+    );
   }
 
   private isControlFlowStatement(stmt: Statement): boolean {
@@ -257,19 +272,19 @@ export class CFGGenerator {
     let exitBlock = currentBlock;
 
     switch (stmt.type) {
-      case 'IfStatement':
+      case StatementType.IF_STATEMENT:
         return this.generateIfCFG(stmt as IfStatement, currentBlock);
-      case 'WhileStatement':
+      case StatementType.WHILE_STATEMENT:
         return this.generateWhileCFG(stmt as WhileStatement, currentBlock);
-      case 'ForStatement':
+      case StatementType.FOR_STATEMENT:
         return this.generateForCFG(stmt as ForStatement, currentBlock);
-      case 'ReturnStatement':
+      case StatementType.RETURN_STATEMENT:
         const returnBlock = this.newBlock([stmt]);
         blocks.push(returnBlock);
         this.connectBlocks(currentBlock, returnBlock);
         this.connectBlocks(returnBlock, this.currentFunctionExitBlock!);
         return { blocks, entry: entryBlock, exit: returnBlock };
-      case 'BreakStatement':
+      case StatementType.BREAK_STATEMENT:
         const breakBlock = this.newBlock([stmt]);
         blocks.push(breakBlock);
         this.connectBlocks(currentBlock, breakBlock);
@@ -277,7 +292,7 @@ export class CFGGenerator {
           this.connectBlocks(breakBlock, this.loopStack[this.loopStack.length - 1]!.breakTarget);
         }
         return { blocks, entry: entryBlock, exit: breakBlock };
-      case 'ContinueStatement':
+      case StatementType.CONTINUE_STATEMENT:
         const continueBlock = this.newBlock([stmt]);
         blocks.push(continueBlock);
         this.connectBlocks(currentBlock, continueBlock);
@@ -285,9 +300,9 @@ export class CFGGenerator {
           this.connectBlocks(continueBlock, this.loopStack[this.loopStack.length - 1]!.continueTarget);
         }
         return { blocks, entry: entryBlock, exit: continueBlock };
-      case 'BlockStatement':
+      case StatementType.BLOCK_STATEMENT:
         return this.generateBlockCFG(stmt as BlockStatement, currentBlock);
-      case 'EmptyStatement':
+      case StatementType.EMPTY_STATEMENT:
         // Empty statement doesn't generate a new block, just passes through
         return { blocks: [], entry: entryBlock, exit: currentBlock };
       default:
@@ -309,13 +324,13 @@ export class CFGGenerator {
     const conditionBlock = this.newBlock();
     // 将条件表达式包装为ExpressionStatement
     const conditionStmt: ExpressionStatement = {
-      type: 'ExpressionStatement',
+      type: StatementType.EXPRESSION_STATEMENT,
       expression: ifStmt.condition
     };
     conditionBlock.statements.push(conditionStmt);
     blocks.push(conditionBlock);
     this.connectBlocks(currentBlock, conditionBlock);
-
+    
     // then分支
     const thenEntryBlock = this.newBlock();
     const { blocks: thenBlocks, exit: thenExit } = this.generateBlockCFG(
@@ -332,11 +347,11 @@ export class CFGGenerator {
       let currentElseExit: BasicBlock;
       
       // 处理 else if：如果 else 分支是 if 语句，需要递归处理
-      if (ifStmt.elseBranch.type === 'IfStatement') {
+      if (ifStmt.elseBranch.type === StatementType.IF_STATEMENT) {
         const nestedIfResult = this.generateIfCFG(ifStmt.elseBranch as IfStatement, elseEntryBlock);
         elseBlocks = nestedIfResult.blocks;
         currentElseExit = nestedIfResult.exit;
-      } else if (ifStmt.elseBranch.type === 'BlockStatement') {
+      } else if (ifStmt.elseBranch.type === StatementType.BLOCK_STATEMENT) {
         const result = this.generateBlockCFG(
           ifStmt.elseBranch as BlockStatement,
           elseEntryBlock
@@ -359,12 +374,11 @@ export class CFGGenerator {
     }
 
     // 智能合并逻辑
-    if (this.smartMerging) {
       // 检查两个分支是否都直接返回
       const thenReturns = this.endsWithReturn(thenExit);
       const elseReturns = ifStmt.elseBranch ? this.endsWithReturn(elseExit) : false;
 
-      if (thenReturns && elseReturns) {
+    if (thenReturns && elseReturns) {
         // 两个分支都返回，不需要合并块
         // 但是需要创建一个虚拟的合并块来保持死代码的独立性
         const mergeBlock = this.newBlock();
@@ -376,18 +390,17 @@ export class CFGGenerator {
         
         // 合并块不连接到任何地方，保持死代码的独立性
         return { blocks, entry: currentBlock, exit: mergeBlock };
-      } else if (thenReturns && !elseReturns) {
+    } else if (thenReturns && !elseReturns) {
         // then分支返回，else分支不返回，else分支继续执行
         this.connectBlocks(thenExit, this.currentFunctionExitBlock!);
         // 确保conditionBlock的后继块顺序正确：then分支在前，else分支在后
         return { blocks, entry: currentBlock, exit: elseExit };
-      } else if (!thenReturns && elseReturns) {
+    } else if (!thenReturns && elseReturns) {
         // else分支返回，then分支不返回，then分支继续执行
         this.connectBlocks(elseExit, this.currentFunctionExitBlock!);
         // 确保conditionBlock的后继块顺序正确：then分支在前，else分支在后
         return { blocks, entry: currentBlock, exit: thenExit };
       }
-    }
 
     // 默认行为：创建合并块
     const mergeBlock = this.newBlock();
@@ -412,7 +425,7 @@ export class CFGGenerator {
     const loopHeader = this.newBlock();
     // 将条件表达式包装为ExpressionStatement
     const conditionStmt: ExpressionStatement = {
-      type: 'ExpressionStatement',
+      type: StatementType.EXPRESSION_STATEMENT,
       expression: whileStmt.condition
     };
     loopHeader.statements.push(conditionStmt);
@@ -430,9 +443,9 @@ export class CFGGenerator {
       loopBodyEntry
     );
     blocks.push(...bodyBlocks);
-
+    
     // 智能合并逻辑：检查循环体是否总是返回
-    if (this.smartMerging && this.endsWithReturn(bodyExit)) {
+    if (this.endsWithReturn(bodyExit)) {
       // 循环体总是返回，不需要循环回退
       this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
       this.connectBlocks(loopHeader, loopExit); // False branch to exit
@@ -453,7 +466,7 @@ export class CFGGenerator {
     currentBlock: BasicBlock
   ): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
     const blocks: BasicBlock[] = [];
-
+    
     // 1. Initialization
     let initExitBlock = currentBlock;
     if (forStmt.init) {
@@ -462,13 +475,13 @@ export class CFGGenerator {
       this.connectBlocks(currentBlock, initBlock);
       initExitBlock = initBlock;
     }
-
+    
     // 2. Condition (Loop Header)
     const loopHeader = this.newBlock();
     if (forStmt.condition) {
       // 将条件表达式包装为ExpressionStatement
       const conditionStmt: ExpressionStatement = {
-        type: 'ExpressionStatement',
+        type: StatementType.EXPRESSION_STATEMENT,
         expression: forStmt.condition
       };
       loopHeader.statements.push(conditionStmt);
@@ -480,6 +493,9 @@ export class CFGGenerator {
     const loopBodyEntry = this.newBlock();
     const loopExit = this.newBlock();
     const loopUpdate = this.newBlock(); // Update block
+    if (forStmt.update) {
+      loopUpdate.statements.push(forStmt.update);
+    }
     blocks.push(loopBodyEntry, loopExit, loopUpdate);
 
     this.loopStack.push({ breakTarget: loopExit, continueTarget: loopUpdate });
@@ -491,7 +507,7 @@ export class CFGGenerator {
     blocks.push(...bodyBlocks);
 
     // 智能合并逻辑：检查循环体是否总是返回
-    if (this.smartMerging && this.endsWithReturn(bodyExit)) {
+    if (this.endsWithReturn(bodyExit)) {
       // 循环体总是返回，不需要循环回退
       this.connectBlocks(loopHeader, loopBodyEntry); // True branch to body
       this.connectBlocks(loopHeader, loopExit); // False branch to exit
@@ -546,7 +562,7 @@ export class CFGGenerator {
           // 在原来的位置插入新的后继，保持顺序
           if (emptyBlockIndex >= 0 && emptyBlockIndex < pred.successors.length) {
             pred.successors.splice(emptyBlockIndex, 0, succ);
-          } else {
+    } else {
             pred.successors.push(succ);
           }
         }
@@ -609,6 +625,11 @@ export class CFGGenerator {
       edges: optimizedEdges
     };
   }
+
+  public visualize(cfg: ControlFlowGraph): string {
+    const visualizer = new CFGVisualizer();
+    return visualizer.visualize(cfg);
+  }
 }
 
 export class CFGVisualizer {
@@ -649,27 +670,6 @@ export class CFGVisualizer {
       result += `  前驱块: ${block.predecessors.map(p => p.id).join(', ') || '无'}\n`;
       result += `  后继块: ${block.successors.map(s => s.id).join(', ') || '无'}\n`;
       
-      // 显示函数作用域变量（入口块特殊处理）
-      if (block.variables && block.variables.length > 0) {
-        result += `  函数作用域变量 (级别 0):\n`;
-        result += `    - 变量: ${block.variables.map(v => v.name).join(', ')}\n`;
-        result += `    - 变量详情: ${block.variables.map(v => `${v.name}(offset: ${v.offset})`).join(', ')}\n`;
-      }
-      
-      // 显示子块信息
-      if (block.subBlocks && block.subBlocks.length > 0) {
-        result += `  子块信息:\n`;
-        for (const subBlock of block.subBlocks) {
-          const indent = '    ' + '    '.repeat(subBlock.scopeLevel - 1); // 根据级别缩进
-          result += `${indent}- 位置: 语句${subBlock.startStatement}\n`;
-          result += `${indent}- 作用域类型: ${subBlock.scopeType}\n`;
-          result += `${indent}- 作用域级别: ${subBlock.scopeLevel}\n`;
-          result += `${indent}- 变量: ${subBlock.variables.map(v => v.name).join(', ') || '无'}\n`;
-          result += `${indent}- 变量详情: ${subBlock.variables.map(v => `${v.name}(offset: ${v.offset})`).join(', ') || '无'}\n`;
-        }
-      } else if (!block.variables || block.variables.length === 0) {
-        result += `  子块信息: 无\n`;
-      }
       result += `\n`;
     }
     
@@ -724,40 +724,40 @@ export class CFGVisualizer {
 
   private analyzeStatement(stmt: Statement, analysis: CFGAnalysis): void {
     switch (stmt.type) {
-      case 'LetDeclaration':
+      case StatementType.LET_DECLARATION:
         const letDecl = stmt as LetDeclaration;
         analysis.variables.add(letDecl.name);
         if (letDecl.initializer) {
           this.analyzeExpression(letDecl.initializer, analysis);
         }
         break;
-      case 'VariableDeclaration':
+      case StatementType.VARIABLE_DECLARATION:
         const varDecl = stmt as VariableDeclaration;
         analysis.variables.add(varDecl.name);
         if (varDecl.initializer) {
           this.analyzeExpression(varDecl.initializer, analysis);
         }
         break;
-      case 'AssignmentStatement':
+      case StatementType.ASSIGNMENT_STATEMENT:
         const assignStmt = stmt as AssignmentStatement;
         analysis.variables.add(assignStmt.target.name);
         this.analyzeExpression(assignStmt.value, analysis);
         break;
-      case 'ExpressionStatement':
+      case StatementType.EXPRESSION_STATEMENT:
         const exprStmt = stmt as ExpressionStatement;
         this.analyzeExpression(exprStmt.expression, analysis);
         break;
-      case 'IfStatement':
+      case StatementType.IF_STATEMENT:
         const ifStmt = stmt as IfStatement;
         analysis.controlFlowStructures.set('if', (analysis.controlFlowStructures.get('if') || 0) + 1);
         this.analyzeExpression(ifStmt.condition, analysis);
         break;
-      case 'WhileStatement':
+      case StatementType.WHILE_STATEMENT:
         const whileStmt = stmt as WhileStatement;
         analysis.controlFlowStructures.set('while', (analysis.controlFlowStructures.get('while') || 0) + 1);
         this.analyzeExpression(whileStmt.condition, analysis);
         break;
-      case 'ForStatement':
+      case StatementType.FOR_STATEMENT:
         const forStmt = stmt as ForStatement;
         analysis.controlFlowStructures.set('for', (analysis.controlFlowStructures.get('for') || 0) + 1);
         if (forStmt.condition) {
@@ -767,26 +767,26 @@ export class CFGVisualizer {
     }
   }
 
-  private analyzeExpression(expr: any, analysis: CFGAnalysis): void {
+  private analyzeExpression(expr: Expression | undefined, analysis: CFGAnalysis): void {
     if (!expr) return;
 
     switch (expr.type) {
-      case 'Identifier':
+      case StatementType.IDENTIFIER:
         analysis.variables.add(expr.name);
         break;
-      case 'NumberLiteral':
+      case StatementType.NUMBER_LITERAL:
         analysis.constants.add(expr.value);
         break;
-      case 'BinaryExpression':
+      case StatementType.BINARY_EXPRESSION:
         analysis.operators.add(expr.operator);
         this.analyzeExpression(expr.left, analysis);
         this.analyzeExpression(expr.right, analysis);
         break;
-      case 'UnaryExpression':
+      case StatementType.UNARY_EXPRESSION:
         analysis.operators.add(expr.operator);
-        this.analyzeExpression(expr.argument, analysis);
+        this.analyzeExpression(expr.operand, analysis);
         break;
-      case 'FunctionCall':
+      case StatementType.FUNCTION_CALL:
         analysis.functions.add(expr.callee.name);
         for (const arg of expr.arguments) {
           this.analyzeExpression(arg, analysis);
@@ -839,103 +839,105 @@ export class CFGVisualizer {
 
   private statementToDisplayString(stmt: Statement): string {
     switch (stmt.type) {
-      case 'VariableDeclaration':
+      case StatementType.VARIABLE_DECLARATION:
         const varDecl = stmt as VariableDeclaration;
         return `声明变量 ${varDecl.name}`;
-      case 'LetDeclaration':
+      case StatementType.LET_DECLARATION:
         const letDecl = stmt as LetDeclaration;
         return `声明let变量 ${letDecl.name}`;
-      case 'AssignmentStatement':
+      case StatementType.ASSIGNMENT_STATEMENT:
         const assignStmt = stmt as AssignmentStatement;
         return `赋值 ${assignStmt.target.name} = ${this.expressionToDisplayString(assignStmt.value)}`;
-      case 'ReturnStatement':
+      case StatementType.RETURN_STATEMENT:
         return `返回语句`;
-      case 'IfStatement':
+      case StatementType.IF_STATEMENT:
         return `If条件: ${this.expressionToDisplayString((stmt as IfStatement).condition)}`;
-      case 'WhileStatement':
+      case StatementType.WHILE_STATEMENT:
         return `While条件: ${this.expressionToDisplayString((stmt as WhileStatement).condition)}`;
-      case 'ForStatement':
+      case StatementType.FOR_STATEMENT:
         return `For循环`;
-      case 'ExpressionStatement':
+      case StatementType.EXPRESSION_STATEMENT:
         const exprStmt = stmt as ExpressionStatement;
         return this.expressionToDisplayString(exprStmt.expression);
-      case 'BreakStatement':
+      case StatementType.BREAK_STATEMENT:
         return `Break语句`;
-      case 'ContinueStatement':
+      case StatementType.CONTINUE_STATEMENT:
         return `Continue语句`;
-      case 'BlockStatement':
+      case StatementType.BLOCK_STATEMENT:
         const blockStmt = stmt as BlockStatement;
         if (blockStmt.statements.length === 0) {
           return `代码块 { }`;
         }
-        let content = '代码块 {\n';
+        let content = '代码块 \n{\n';
         for (const innerStmt of blockStmt.statements) {
-          if (innerStmt.type === 'EmptyStatement') continue;
+          if (innerStmt.type === StatementType.EMPTY_STATEMENT) continue;
           content += `    - ${this.statementToDisplayString(innerStmt)}\n`;
         }
         content += '}';
         return content;
-      case 'EmptyStatement':
+      case StatementType.EMPTY_STATEMENT:
         return `空语句`;
       default:
         return `未知语句类型: ${stmt.type}`;
     }
   }
 
-  private expressionToDisplayString(expr: any): string {
+  private expressionToDisplayString(expr: Expression): string {
     switch (expr.type) {
-      case 'NumberLiteral':
+      case StatementType.NUMBER_LITERAL:
         return `数字: ${expr.value}`;
-      case 'Identifier':
+      case StatementType.IDENTIFIER:
         return `变量: ${expr.name}`;
-      case 'BinaryExpression':
+      case StatementType.BINARY_EXPRESSION:
         return `${this.expressionToDisplayString(expr.left)} ${expr.operator} ${this.expressionToDisplayString(expr.right)}`;
-      case 'UnaryExpression':
-        return `${expr.operator}${this.expressionToDisplayString(expr.argument)}`;
-      case 'FunctionCall':
+      case StatementType.UNARY_EXPRESSION:
+        return `${expr.operator}${this.expressionToDisplayString(expr.operand)}`;
+      case StatementType.FUNCTION_CALL:
         return `函数调用: ${expr.callee.name}(...)`;
       default:
         return `表达式`;
     }
   }
 
-  private astToJsonString(ast: any): string {
+  private astToJsonString(ast: ASTNode): string {
     // 创建一个简化的AST表示，只包含关键信息
     const simplified = this.simplifyAST(ast);
     return JSON.stringify(simplified, null, 2).replace(/\n/g, ' ').replace(/\s+/g, ' ');
   }
 
-  private simplifyAST(ast: any): any {
+  private simplifyAST(ast: ASTNode): Record<string, unknown> {
     if (!ast || typeof ast !== 'object') {
-      return ast;
+      return ast as unknown as Record<string, unknown>;
     }
 
-    const result: any = {};
+    const result: Record<string, unknown> = {};
+    const astAny = ast as unknown as Record<string, unknown>;
     
     // 保留关键字段
-    if (ast.type) result.type = ast.type;
-    if (ast.name) result.name = ast.name;
-    if (ast.value !== undefined) result.value = ast.value;
-    if (ast.operator) result.operator = ast.operator;
+    if (astAny.type) result.type = astAny.type;
+    if (astAny.name) result.name = astAny.name;
+    if (astAny.value !== undefined) result.value = astAny.value;
+    if (astAny.operator) result.operator = astAny.operator;
     
     // 递归处理子节点
-    if (ast.left) result.left = this.simplifyAST(ast.left);
-    if (ast.right) result.right = this.simplifyAST(ast.right);
-    if (ast.argument) result.argument = this.simplifyAST(ast.argument);
-    if (ast.condition) result.condition = this.simplifyAST(ast.condition);
-    if (ast.target) result.target = this.simplifyAST(ast.target);
-    if (ast.callee) result.callee = this.simplifyAST(ast.callee);
-    if (ast.expression) result.expression = this.simplifyAST(ast.expression);
-    if (ast.initializer) result.initializer = this.simplifyAST(ast.initializer);
+    if ('left' in astAny && astAny.left) result.left = this.simplifyAST(astAny.left as ASTNode);
+    if ('right' in astAny && astAny.right) result.right = this.simplifyAST(astAny.right as ASTNode);
+    if ('operand' in astAny && astAny.operand) result.operand = this.simplifyAST(astAny.operand as ASTNode);
+    if ('condition' in astAny && astAny.condition) result.condition = this.simplifyAST(astAny.condition as ASTNode);
+    if ('target' in astAny && astAny.target) result.target = this.simplifyAST(astAny.target as ASTNode);
+    if ('callee' in astAny && astAny.callee) result.callee = this.simplifyAST(astAny.callee as ASTNode);
+    if ('expression' in astAny && astAny.expression) result.expression = this.simplifyAST(astAny.expression as ASTNode);
+    if ('initializer' in astAny && astAny.initializer) result.initializer = this.simplifyAST(astAny.initializer as ASTNode);
     
     // 处理数组
-    if (ast.statements && Array.isArray(ast.statements)) {
-      result.statements = ast.statements.map((stmt: any) => this.simplifyAST(stmt));
+    if ('statements' in ast && Array.isArray(astAny.statements)) {
+      result.statements = astAny.statements.map((stmt: unknown) => this.simplifyAST(stmt as ASTNode));
     }
-    if (ast.arguments && Array.isArray(ast.arguments)) {
-      result.arguments = ast.arguments.map((arg: any) => this.simplifyAST(arg));
+    if ('arguments' in ast && Array.isArray(astAny.arguments)) {
+      result.arguments = astAny.arguments.map((arg: unknown) => this.simplifyAST(arg as ASTNode));
     }
     
     return result;
   }
 }
+

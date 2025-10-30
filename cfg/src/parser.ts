@@ -33,32 +33,13 @@ import {
 
 // TDZ 检查器类
 class TDZChecker {
-  private letVariables = new Set<string>();
   private currentFunctionLetVars = new Set<string>();
-  private letDeclarations = new Map<string, number>(); // 变量名 -> 声明位置
   public inForLoopCondition: boolean = false;
   public inForLoopBody: boolean = false;
   
   // 开始检查新函数
   startFunction(): void {
     this.currentFunctionLetVars.clear();
-    this.letDeclarations.clear();
-  }
-  
-  // 扫描函数中的所有 let 声明
-  scanLetDeclarations(statements: Statement[]): void {
-    for (const statement of statements) {
-      if (statement.type === 'LetDeclaration') {
-        const letDecl = statement as LetDeclaration;
-        // 所有 let 变量都加入 TDZ（不管是否有初始化表达式）
-        this.currentFunctionLetVars.add(letDecl.name);
-      }
-    }
-  }
-  
-  // 记录 let 声明的位置
-  recordLetDeclaration(varName: string, position: number): void {
-    this.letDeclarations.set(varName, position);
   }
   
   // 检查变量访问
@@ -240,7 +221,7 @@ export class StatementParser {
     this.context.currentScope.variables.set(name, {
       name,
       type: DataType.INT,
-      value: undefined,
+      value: 0,
       isInitialized: false,
       isTDZ: true
     });
@@ -262,8 +243,16 @@ export class StatementParser {
       // 有初始化表达式，从 TDZ 中移除
       this.tdzChecker.markVariableInitialized(name);
     } else {
-      // 没有初始化表达式，保持 TDZ 状态
-      // this.tdzChecker.markLetVariable(name);
+      // 没有初始化表达式，但内存会被初始化为0，因此也算已初始化
+      this.context.currentScope.variables.set(name, {
+        name,
+        type: DataType.INT,
+        value: 0,
+        isInitialized: true,
+        isTDZ: false
+      });
+      // 从 TDZ 中移除（因为内存会被初始化为0）
+      this.tdzChecker.markVariableInitialized(name);
     }
 
     this.expectSemicolon();
@@ -385,19 +374,33 @@ export class StatementParser {
     this.expect(TokenType.FOR);
     this.expect(TokenType.LEFTPAREN);
     
+    // 为 for 循环创建独立的作用域
+    const forLoopScope: Scope = {
+      variables: new Map(),
+      functions: new Map(),
+      parent: this.context.currentScope
+    };
+    
+    const oldScope = this.context.currentScope;
+    this.context.currentScope = forLoopScope;
+    
     // 先解析初始化部分，但不立即解析表达式
     let init: VariableDeclaration | LetDeclaration | AssignmentStatement | ExpressionStatement | undefined;
     let initName: string | undefined;
     
-    if (this.lexer.getCurrentToken()?.type === TokenType.INT) {
+    // 检查 init 部分是否为空（直接是分号）
+    if (this.lexer.getCurrentToken()?.type === TokenType.SEMICOLON) {
+      // init 部分为空，不解析任何内容
+      init = undefined;
+    } else if (this.lexer.getCurrentToken()?.type === TokenType.INT) {
       const dataType = this.parseDataType();
       initName = this.parseIdentifierName();
       
-      // 先声明变量，不设置初始值
+      // 先声明变量，不设置初始值（添加到 for 循环作用域）
       this.context.currentScope.variables.set(initName, {
         name: initName,
         type: dataType,
-        value: undefined,
+        value: 0,
         isInitialized: false
       });
       
@@ -415,11 +418,11 @@ export class StatementParser {
       this.lexer.advance(); // 跳过 'let'
       initName = this.parseIdentifierName();
       
-      // 先声明变量，不设置初始值
+      // 先声明变量，不设置初始值（添加到 for 循环作用域）
       this.context.currentScope.variables.set(initName, {
         name: initName,
         type: DataType.INT,
-        value: undefined,
+        value: 0,
         isInitialized: false
       });
       
@@ -465,6 +468,10 @@ export class StatementParser {
     this.tdzChecker.inForLoopBody = true;
     const body = this.parseStatement();
     this.tdzChecker.inForLoopBody = false;
+    
+    // 恢复原作用域（退出 for 循环作用域）
+    this.context.currentScope = oldScope;
+    
     return ASTFactory.createForStatement(init, condition, update, body!);
   }
 
@@ -698,6 +705,19 @@ export class StatementParser {
     return ASTFactory.createFunctionCall(callee, args);
   }
 
+  // 在作用域链中查找变量
+  private findVariableInScope(varName: string): VariableInfo | null {
+    let currentScope: Scope | null = this.context.currentScope;
+    while (currentScope) {
+      const variable = currentScope.variables.get(varName);
+      if (variable) {
+        return variable;
+      }
+      currentScope = currentScope.parent || null;
+    }
+    return null;
+  }
+
   private parseIdentifier(): Identifier {
     const token = this.lexer.getCurrentToken();
     if (token?.type !== TokenType.IDENTIFIER) {
@@ -705,6 +725,17 @@ export class StatementParser {
     }
     
     const varName = token.value as string;
+    
+    // 检查变量是否在作用域链中存在
+    const variable = this.findVariableInScope(varName);
+    if (!variable) {
+      this.errors.push({
+        message: `Variable '${varName}' is not defined`,
+        position: token.position || 0,
+        line: token.line || 1,
+        column: token.column || 1
+      });
+    }
     
     // 编译时 TDZ 检查
     try {
@@ -789,45 +820,6 @@ export class StatementParser {
     });
   }
 
-  private scanLetDeclarations(): void {
-    // 保存当前位置
-    const savedPosition = this.lexer.getCurrentPosition();
-    
-    // 扫描函数体，查找所有 let 声明
-    this.expect(TokenType.LBRACE);
-    
-    while (this.lexer.getCurrentToken()?.type !== TokenType.RBRACE && !this.lexer.isAtEnd()) {
-      const token = this.lexer.getCurrentToken();
-      if (token?.type === TokenType.LET) {
-        // 找到 let 声明，立即添加到作用域
-        this.lexer.advance(); // 跳过 'let'
-        const name = this.parseIdentifierName();
-        
-        // 添加到作用域，标记为 TDZ
-        this.context.currentScope.variables.set(name, {
-          name,
-          type: DataType.INT,
-          value: undefined,
-          isInitialized: false,
-          isTDZ: true
-        });
-        
-        // 跳过初始化表达式和分号
-        if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
-          this.lexer.advance();
-          this.parseExpression(); // 跳过表达式
-        }
-        this.expectSemicolon();
-      } else {
-        // 跳过其他语句
-        this.parseStatement();
-      }
-    }
-    
-    // 恢复位置
-    this.lexer.setPosition(savedPosition);
-  }
-
   private evaluateExpression(expression: Expression): any {
     switch (expression.type) {
       case 'NumberLiteral':
@@ -869,62 +861,6 @@ export class StatementParser {
       default:
         return 0;
     }
-  }
-
-  // 扫描函数体中的所有 let 声明，预先添加到 TDZ
-  private scanLetDeclarationsInFunction(): void {
-    // 保存当前位置
-    const savedPosition = this.lexer.getCurrentPosition();
-    
-    // 查找左大括号
-    while (this.lexer.getCurrentToken()?.type !== TokenType.LBRACE) {
-      this.lexer.advance();
-    }
-    this.lexer.advance(); // 跳过左大括号
-    
-    // 扫描函数体中的 let 声明
-    let depth = 1; // 大括号深度
-    while (depth > 0) {
-      const token = this.lexer.getCurrentToken();
-      if (!token) break;
-      
-      if (token.type === TokenType.LBRACE) {
-        depth++;
-      } else if (token.type === TokenType.RBRACE) {
-        depth--;
-        if (depth === 0) break; // 到达函数结束
-      } else if (token.type === TokenType.LET) {
-        // 找到 let 声明
-        this.lexer.advance(); // 跳过 let
-        const varName = this.parseIdentifierName();
-        
-        // 添加到作用域，标记为 TDZ
-        this.context.currentScope.variables.set(varName, {
-          name: varName,
-          type: DataType.INT,
-          value: undefined,
-          isInitialized: false,
-          isTDZ: true
-        });
-        
-        // 跳过初始化部分
-        if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
-          this.lexer.advance(); // 跳过 =
-          this.skipExpression(); // 跳过表达式
-        }
-        
-        // 跳过分号
-        if (this.lexer.getCurrentToken()?.type === TokenType.SEMICOLON) {
-          this.lexer.advance();
-        }
-        continue; // 不要再次 advance
-      }
-      
-      this.lexer.advance();
-    }
-    
-    // 恢复位置
-    this.lexer.setPosition(savedPosition);
   }
 
   // 跳过表达式（用于扫描时）

@@ -11,6 +11,8 @@ function earlyReturnFunction() {
     x = 100;
     let y = x + 1;
 
+    let y1 = 100;
+
     {
       let z = 111;
     }

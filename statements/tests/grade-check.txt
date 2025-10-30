@@ -1,0 +1,30 @@
+function checkGrade() {
+    let score = 10;
+    let grade = 0;
+    
+    if (score >= 90) {
+        grade = 1;  // A级
+        let bonusA = 10;
+        {
+          grade = 10;
+        }
+        grade = 111;
+    } else if (score >= 80) {
+      
+      let bonusB = 5;
+      grade = 2;
+      let grade = 2;  // B级
+      
+      {
+        grade = grade + 20;
+        let c = 100;
+      }
+      let cc = 1110;
+      cc = 222;
+    } else if (scope >= 60) {
+      grade = 3;
+    } else {
+      grade = 4;
+    }
+    return grade;
+}

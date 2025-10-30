@@ -1,0 +1,17 @@
+// 多级嵌套作用域测试用例
+
+function nestedScopeTest() {
+    let x = 10;        // 级别 0 (函数作用域)
+    
+    if (x > 5) {       // 级别 0
+        let y = 20;    // 级别 1
+        {
+            let z = 30; // 级别 2
+            {
+                let w = 40; // 级别 3
+            }
+        }
+    }
+    
+    return x;
+}

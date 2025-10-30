@@ -1,0 +1,14 @@
+// 验证变量作用域测试
+
+function scopeTest() {
+    let a = 1;        // 函数作用域
+    
+    {
+        let b = 2;    // 子块作用域
+        let c = 3;    // 子块作用域
+    }
+    
+    let d = 4;        // 函数作用域
+    
+    return a + d;
+}

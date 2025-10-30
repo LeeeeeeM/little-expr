@@ -1,0 +1,9 @@
+function testFor() {
+    let x = 0;
+    
+    for (let i = 0; i < 5; i = i + 1) {
+        x = x + 1;
+    }
+    
+    return x;
+}

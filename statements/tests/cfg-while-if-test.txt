@@ -1,0 +1,18 @@
+// while里面嵌套if的测试用例
+
+function whileIfTest() {
+    let x = 10;        // 级别 0 (函数作用域)
+    
+    while (x > 0) {    // while循环
+        let y = 20;    // 级别 1 (while循环作用域)
+        
+        if (y > 10) {  // if语句
+            let z = 30; // 级别 2 (if分支作用域)
+        }
+        
+        let w = 40;    // 级别 1 (while循环作用域)
+        x = x - 1;
+    }
+    
+    return x;
+}

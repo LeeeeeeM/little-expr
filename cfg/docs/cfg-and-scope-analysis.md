@@ -20,6 +20,7 @@ CFG主要负责**控制流管理**，即程序执行的路径和跳转指令。
 - **作用域管理**：变量的生命周期
 - **类型信息**：变量的类型
 - **栈帧管理**：`sub esp, 4` 等
+- **语法分组**：`BlockStatement` 只是语法结构，不涉及控制流
 
 ## 作用域信息的职责
 
@@ -56,6 +57,44 @@ function test() {
 }
 ```
 
+### BlockStatement 不参与 CFG
+
+**重要理解**：`BlockStatement` 根本不参与 CFG 的生成。
+
+#### 原因
+- **CFG关注控制流**：程序执行的路径和跳转
+- **BlockStatement只是语法分组**：不涉及控制流
+- **线性执行**：`BlockStatement` 内的语句按顺序执行，没有分支或循环
+
+#### 真正的控制流语句
+1. **条件跳转**：`IfStatement` - 根据条件选择执行路径
+2. **循环跳转**：`WhileStatement`, `ForStatement` - 重复执行和跳转
+3. **函数跳转**：`ReturnStatement` - 跳转到调用者
+4. **循环控制**：`BreakStatement`, `ContinueStatement` - 跳出或继续循环
+
+#### 示例对比
+```javascript
+// BlockStatement - 不参与CFG，只是语法分组
+{
+    let x = 1;  // 只是变量声明
+    let y = 2;  // 只是变量声明
+    x = x + y;  // 只是赋值
+}
+// 这个块整体就是一个基本块，没有控制流
+
+// IfStatement - 参与CFG，涉及控制流
+if (x > 5) {    // 条件跳转
+    return x;   // 跳转到函数出口
+}
+// 这里有两个执行路径：true分支和false分支
+```
+
+#### CFG生成逻辑
+1. **函数体**：`generateFunctionCFG` 调用 `generateBlockCFG`
+2. **复合语句**：`generateBlockCFG` 处理语句序列
+3. **控制流语句**：创建新的基本块和跳转
+4. **普通语句**：添加到当前基本块（包括BlockStatement）
+
 **CFG负责的部分**：
 ```assembly
 ; 控制流部分
@@ -73,10 +112,10 @@ label2:
 **作用域信息负责的部分**：
 ```assembly
 ; 变量管理部分
-sub esp, 8         ; 作用域: 为x和y分配栈空间
-mov [esp+4], 10    ; 作用域: 初始化x
-mov [esp], 20      ; 作用域: 初始化y (嵌套作用域)
-add esp, 8         ; 作用域: 释放栈空间
+sub esp, 2         ; 作用域: 为x和y分配栈空间 (每个变量占1个地址)
+mov [esp+1], 10    ; 作用域: 初始化x
+mov [esp+0], 20    ; 作用域: 初始化y (嵌套作用域)
+add esp, 2         ; 作用域: 释放栈空间
 ```
 
 ## 智能合并
@@ -239,13 +278,13 @@ export class DynamicStackGenerator {
     
     // 为每个子块生成栈管理代码
     for (const subBlock of subBlocks) {
-      const totalSize = subBlock.variables.reduce((sum, var) => sum + var.size, 0);
+      const variableCount = subBlock.variables.length;
       
-      if (totalSize > 0) {
-        // 子块开始：分配栈空间
+      if (variableCount > 0) {
+        // 子块开始：分配栈空间 (每个变量占1个地址)
         instructions.push({
           opcode: 'sub',
-          operands: ['esp', totalSize.toString()],
+          operands: ['esp', variableCount.toString()],
           comment: `allocate space for sub-block variables: ${subBlock.variables.map(v => v.name).join(', ')}`
         });
         
@@ -286,35 +325,156 @@ function test() {
 ; 函数入口
 push ebp
 mov ebp, esp
-sub esp, 4          ; 为x分配空间
+sub esp, 1          ; 为x分配空间 (每个变量占1个地址)
 
 ; 初始化x
 mov [esp], 10
 
 ; 子块1开始
-sub esp, 8          ; 为y和z分配空间
+sub esp, 2          ; 为y和z分配空间 (每个变量占1个地址)
 
 ; 初始化y
-mov [esp+4], 20
+mov [esp+1], 20
 
 ; 子块2开始
-sub esp, 4          ; 为z分配空间
+sub esp, 1          ; 为z分配空间
 
 ; 初始化z
 mov [esp], 30
 
 ; 子块2结束
-add esp, 4          ; 释放z的空间
+add esp, 1          ; 释放z的空间
 
 ; 子块1结束
-add esp, 8          ; 释放y和z的空间
+add esp, 2          ; 释放y和z的空间
 
 ; 函数出口
-mov eax, [esp+8]    ; 返回x
+mov eax, [esp+3]    ; 返回x
 mov esp, ebp
 pop ebp
 ret
 ```
+
+## 真实编译器的栈管理策略
+
+### 静态栈帧分配（主流做法）
+
+真实编译器通常使用**静态栈帧分配**，而不是动态栈管理：
+
+#### **原因**：
+1. **性能考虑**：`sub esp` 和 `add esp` 是相对昂贵的操作
+2. **CPU优化**：现代CPU对栈帧访问有优化
+3. **指令缓存**：减少指令数量，提高缓存命中率
+4. **简化代码生成**：所有变量偏移量在编译时确定
+5. **ABI兼容性**：符合系统调用约定，支持异常处理
+
+#### **静态分配示例**：
+```assembly
+; 函数入口
+earlyReturnFunction:
+    push ebp
+    mov ebp, esp
+    sub esp, 3          ; 一次性分配所有变量的空间 (每个变量占1个地址)
+    
+    ; 栈布局：
+    ; [ebp-1]  = x
+    ; [ebp-2]  = y  
+    ; [ebp-3]  = z
+    
+    ; 初始化x
+    mov [ebp-1], 10     ; x = 10
+    
+    ; 条件判断
+    mov eax, [ebp-1]
+    cmp eax, 5
+    jg label_true
+    
+    ; false分支
+    mov [ebp-1], 100   ; x = 100
+    mov eax, [ebp-1]
+    add eax, 1
+    mov [ebp-2], eax    ; y = x + 1
+    
+    ; 子块
+    mov [ebp-3], 111    ; z = 111
+    
+    ; 返回
+    mov eax, [ebp-2]    ; 返回y
+    jmp function_exit
+
+label_true:
+    mov eax, [ebp-1]
+    mov ebx, 2
+    mul ebx
+    jmp function_exit
+
+function_exit:
+    mov esp, ebp
+    pop ebp
+    ret
+```
+
+### 动态栈管理的场景
+
+动态栈管理主要用于特殊情况：
+
+#### **变长数组（VLA）**：
+```c
+void func(int n) {
+    int arr[n];  // 变长数组，需要动态分配
+}
+```
+
+#### **alloca()函数**：
+```c
+void func() {
+    char *buf = alloca(100);  // 动态栈分配
+}
+```
+
+### 现代编译器的优化
+
+#### **寄存器分配**：
+```assembly
+; 优化后：变量尽可能放在寄存器中
+earlyReturnFunction:
+    push ebp
+    mov ebp, esp
+    
+    mov eax, 10         ; x在寄存器中
+    cmp eax, 5
+    jg label_true
+    
+    mov eax, 100       ; x = 100
+    mov ebx, eax       ; y在寄存器中
+    add ebx, 1
+    
+    ; 只有必要时才使用栈
+    push ebx           ; 保存y到栈
+    mov ecx, 111       ; z在寄存器中
+    
+    pop eax            ; 恢复y
+    jmp function_exit
+
+label_true:
+    mov ebx, 2
+    mul ebx
+    jmp function_exit
+
+function_exit:
+    pop ebp
+    ret
+```
+
+### 总结
+
+**真实编译器主要使用静态栈帧分配**，因为：
+1. **性能更好**：减少栈操作开销
+2. **代码更简单**：偏移量编译时确定
+3. **优化更容易**：寄存器分配、指令调度等
+4. **调试友好**：变量位置固定
+
+**动态栈管理**主要用于特殊情况（VLA、alloca等），不是主流做法。
 
 ## 编译流程
 
@@ -343,12 +503,14 @@ CFG + 作用域信息 → 代码生成 → 汇编代码
 ### 核心观点
 1. **CFG = 跳转指令（jmp）**：负责控制流管理
 2. **作用域信息 = 变量管理**：负责变量声明和生命周期
-3. **智能合并优化CFG结构**：减少不必要的合并块
-4. **子块信息保留在CFG中**：支持动态栈管理
-5. **编译时分析**：语义信息从AST获取，CFG提供控制流骨架
+3. **BlockStatement不参与CFG**：只是语法分组，不涉及控制流
+4. **智能合并优化CFG结构**：减少不必要的合并块
+5. **子块信息保留在CFG中**：支持动态栈管理
+6. **编译时分析**：语义信息从AST获取，CFG提供控制流骨架
 
 ### 设计原则
 - **职责分离**：CFG专注控制流，作用域专注变量管理
+- **语法与控制流分离**：BlockStatement不参与CFG，只负责语法分组
 - **信息完整**：保留必要的子块信息
 - **性能优化**：编译时分析，运行时执行
 - **扩展性**：易于添加新功能和优化
@@ -360,3 +522,19 @@ CFG + 作用域信息 → 代码生成 → 汇编代码
 - **控制流优化**：基于CFG进行跳转优化
 
 这种设计既保持了CFG的简洁性，又能支持复杂的作用域管理和动态栈管理，为后续的优化和代码生成提供了完整的信息基础。
+
+## 关键理解总结
+
+### BlockStatement 的正确处理
+- **不参与CFG**：`BlockStatement` 只是语法分组，不涉及控制流
+- **作为普通语句**：在CFG生成时，`BlockStatement` 被当作普通语句处理
+- **保留子块信息**：通过 `SubBlockAnalyzer` 分析并保留子块信息
+- **支持动态栈管理**：子块信息为后续的动态栈管理提供基础
+
+### 实现要点
+1. **`isControlFlowStatement()`** 不包含 `BlockStatement`
+2. **`generateBlockCFG()`** 将 `BlockStatement` 作为普通语句添加到当前块
+3. **`SubBlockAnalyzer`** 分析并保留子块信息
+4. **职责分离**：CFG专注控制流，子块信息专注作用域管理
+
+这种设计确保了CFG的简洁性和正确性，同时保留了必要的作用域信息。

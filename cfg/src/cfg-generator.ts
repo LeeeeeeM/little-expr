@@ -103,6 +103,85 @@ export class CFGGenerator {
     return block;
   }
 
+  /**
+   * 创建包含条件表达式的基本块
+   */
+  private createConditionBlock(condition: Expression): BasicBlock {
+    const conditionBlock = this.newBlock();
+    const conditionStmt: ExpressionStatement = {
+      type: StatementType.EXPRESSION_STATEMENT,
+      expression: condition
+    };
+    conditionBlock.statements.push(conditionStmt);
+    return conditionBlock;
+  }
+
+  /**
+   * 移除空块并更新连接关系
+   */
+  private removeEmptyBlocks(blocks: BasicBlock[]): BasicBlock[] {
+    // 识别空块（除了入口块和出口块）
+    const emptyBlocks = blocks.filter(block => 
+      !block.isEntry && 
+      !block.isExit && 
+      block.statements.length === 0
+    );
+    
+    if (emptyBlocks.length === 0) {
+      return blocks;
+    }
+    
+    // 为空块更新连接关系
+    for (const emptyBlock of emptyBlocks) {
+      const predecessors = emptyBlock.predecessors;
+      const successors = emptyBlock.successors;
+      
+      if (predecessors.length === 1 && successors.length === 1) {
+        // 简单情况：一个前驱，一个后继，直接连接
+        this.replaceBlockConnection(predecessors[0]!, emptyBlock, successors[0]!);
+      } else if (predecessors.length > 0 && successors.length === 1) {
+        // 多个前驱，一个后继：所有前驱直接连接到后继
+        const succ = successors[0]!;
+        for (const pred of predecessors) {
+          this.replaceBlockConnection(pred, emptyBlock, succ);
+        }
+      } else if (predecessors.length === 1 && successors.length > 1) {
+        // 一个前驱，多个后继：前驱直接连接到所有后继
+        const pred = predecessors[0]!;
+        for (const succ of successors) {
+          this.replaceBlockConnection(pred, emptyBlock, succ);
+        }
+      }
+    }
+    
+    // 过滤掉空块
+    return blocks.filter(block => !emptyBlocks.includes(block));
+  }
+
+  /**
+   * 将前驱块到空块的连接替换为前驱块到目标块的连接
+   */
+  private replaceBlockConnection(pred: BasicBlock, emptyBlock: BasicBlock, target: BasicBlock): void {
+    // 更新前驱的后继
+    const emptyBlockIndex = pred.successors.findIndex(s => s.id === emptyBlock.id);
+    pred.successors = pred.successors.filter(s => s.id !== emptyBlock.id);
+    
+    if (!pred.successors.includes(target)) {
+      // 在原来的位置插入新的后继，保持顺序
+      if (emptyBlockIndex >= 0 && emptyBlockIndex < pred.successors.length) {
+        pred.successors.splice(emptyBlockIndex, 0, target);
+      } else {
+        pred.successors.push(target);
+      }
+    }
+    
+    // 更新目标的前驱
+    target.predecessors = target.predecessors.filter(p => p.id !== emptyBlock.id);
+    if (!target.predecessors.includes(pred)) {
+      target.predecessors.push(pred);
+    }
+  }
+
   private connectBlocks(from: BasicBlock, to: BasicBlock): void {
     // 检查是否已经存在连接，避免重复添加
     if (!from.successors.includes(to)) {
@@ -134,7 +213,6 @@ export class CFGGenerator {
     this.currentFunctionExitBlock = this.newBlock();
     this.currentFunctionExitBlock.isExit = true;
 
-    const allBlocks: BasicBlock[] = [entryBlock, this.currentFunctionExitBlock];
     let currentBlock = entryBlock;
 
     // Process function body - 按照理论：线性执行到跳转点
@@ -142,7 +220,6 @@ export class CFGGenerator {
       funcDecl.body as BlockStatement,
       currentBlock
     );
-    allBlocks.push(...bodyBlocks);
     
     // 只有当bodyEntry不是currentBlock时才连接
     if (bodyEntry !== currentBlock) {
@@ -201,7 +278,7 @@ export class CFGGenerator {
         continue;
       }
       
-      if (this.isControlFlowStatement(stmt)) {
+      if (isControlFlowStatement(stmt)) {
         // 控制流语句：创建新的基本块
         const { blocks: stmtBlocks, entry: stmtEntry, exit: stmtExit } = this.generateStatementCFG(
           stmt,
@@ -252,25 +329,18 @@ export class CFGGenerator {
 
   private blockContainsControlFlow(block: BlockStatement): boolean {
     return block.statements.some(s =>
-      this.isControlFlowStatement(s) ||
+      isControlFlowStatement(s) ||
       (s.type === StatementType.BLOCK_STATEMENT && this.blockContainsControlFlow(s as BlockStatement))
     );
   }
 
-  private isControlFlowStatement(stmt: Statement): boolean {
-    // 使用全局工具函数
-    return isControlFlowStatement(stmt);
-    // 注意：BlockStatement 不再被视为控制流语句，而是作为普通语句处理
-  }
+  // 注意：BlockStatement 不再被视为控制流语句，而是作为普通语句处理
+  // 直接使用全局的 isControlFlowStatement 函数
 
   private generateStatementCFG(
     stmt: Statement,
     currentBlock: BasicBlock
   ): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
-    const blocks: BasicBlock[] = [];
-    let entryBlock = currentBlock;
-    let exitBlock = currentBlock;
-
     switch (stmt.type) {
       case StatementType.IF_STATEMENT:
         return this.generateIfCFG(stmt as IfStatement, currentBlock);
@@ -279,39 +349,51 @@ export class CFGGenerator {
       case StatementType.FOR_STATEMENT:
         return this.generateForCFG(stmt as ForStatement, currentBlock);
       case StatementType.RETURN_STATEMENT:
-        const returnBlock = this.newBlock([stmt]);
-        blocks.push(returnBlock);
-        this.connectBlocks(currentBlock, returnBlock);
-        this.connectBlocks(returnBlock, this.currentFunctionExitBlock!);
-        return { blocks, entry: entryBlock, exit: returnBlock };
+        return this.generateReturnCFG(stmt, currentBlock);
       case StatementType.BREAK_STATEMENT:
-        const breakBlock = this.newBlock([stmt]);
-        blocks.push(breakBlock);
-        this.connectBlocks(currentBlock, breakBlock);
-        if (this.loopStack.length > 0) {
-          this.connectBlocks(breakBlock, this.loopStack[this.loopStack.length - 1]!.breakTarget);
-        }
-        return { blocks, entry: entryBlock, exit: breakBlock };
+        return this.generateBreakCFG(stmt, currentBlock);
       case StatementType.CONTINUE_STATEMENT:
-        const continueBlock = this.newBlock([stmt]);
-        blocks.push(continueBlock);
-        this.connectBlocks(currentBlock, continueBlock);
-        if (this.loopStack.length > 0) {
-          this.connectBlocks(continueBlock, this.loopStack[this.loopStack.length - 1]!.continueTarget);
-        }
-        return { blocks, entry: entryBlock, exit: continueBlock };
+        return this.generateContinueCFG(stmt, currentBlock);
       case StatementType.BLOCK_STATEMENT:
         return this.generateBlockCFG(stmt as BlockStatement, currentBlock);
       case StatementType.EMPTY_STATEMENT:
         // Empty statement doesn't generate a new block, just passes through
-        return { blocks: [], entry: entryBlock, exit: currentBlock };
+        return { blocks: [], entry: currentBlock, exit: currentBlock };
       default:
         // For simple statements, add to current block
-        const simpleBlock = this.newBlock([stmt]);
-        blocks.push(simpleBlock);
-        this.connectBlocks(currentBlock, simpleBlock);
-        return { blocks, entry: entryBlock, exit: simpleBlock };
+        return this.generateSimpleStatementCFG(stmt, currentBlock);
     }
+  }
+
+  private generateReturnCFG(stmt: ReturnStatement, currentBlock: BasicBlock): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
+    const returnBlock = this.newBlock([stmt]);
+    this.connectBlocks(currentBlock, returnBlock);
+    this.connectBlocks(returnBlock, this.currentFunctionExitBlock!);
+    return { blocks: [returnBlock], entry: currentBlock, exit: returnBlock };
+  }
+
+  private generateBreakCFG(stmt: BreakStatement, currentBlock: BasicBlock): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
+    const breakBlock = this.newBlock([stmt]);
+    this.connectBlocks(currentBlock, breakBlock);
+    if (this.loopStack.length > 0) {
+      this.connectBlocks(breakBlock, this.loopStack[this.loopStack.length - 1]!.breakTarget);
+    }
+    return { blocks: [breakBlock], entry: currentBlock, exit: breakBlock };
+  }
+
+  private generateContinueCFG(stmt: ContinueStatement, currentBlock: BasicBlock): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
+    const continueBlock = this.newBlock([stmt]);
+    this.connectBlocks(currentBlock, continueBlock);
+    if (this.loopStack.length > 0) {
+      this.connectBlocks(continueBlock, this.loopStack[this.loopStack.length - 1]!.continueTarget);
+    }
+    return { blocks: [continueBlock], entry: currentBlock, exit: continueBlock };
+  }
+
+  private generateSimpleStatementCFG(stmt: Statement, currentBlock: BasicBlock): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
+    const simpleBlock = this.newBlock([stmt]);
+    this.connectBlocks(currentBlock, simpleBlock);
+    return { blocks: [simpleBlock], entry: currentBlock, exit: simpleBlock };
   }
 
   private generateIfCFG(
@@ -321,13 +403,7 @@ export class CFGGenerator {
     const blocks: BasicBlock[] = [];
     
     // 条件检查块：包含条件表达式
-    const conditionBlock = this.newBlock();
-    // 将条件表达式包装为ExpressionStatement
-    const conditionStmt: ExpressionStatement = {
-      type: StatementType.EXPRESSION_STATEMENT,
-      expression: ifStmt.condition
-    };
-    conditionBlock.statements.push(conditionStmt);
+    const conditionBlock = this.createConditionBlock(ifStmt.condition);
     blocks.push(conditionBlock);
     this.connectBlocks(currentBlock, conditionBlock);
     
@@ -422,13 +498,7 @@ export class CFGGenerator {
     const blocks: BasicBlock[] = [];
     
     // 循环头块：包含条件检查
-    const loopHeader = this.newBlock();
-    // 将条件表达式包装为ExpressionStatement
-    const conditionStmt: ExpressionStatement = {
-      type: StatementType.EXPRESSION_STATEMENT,
-      expression: whileStmt.condition
-    };
-    loopHeader.statements.push(conditionStmt);
+    const loopHeader = this.createConditionBlock(whileStmt.condition);
     blocks.push(loopHeader);
     this.connectBlocks(currentBlock, loopHeader);
 
@@ -477,15 +547,9 @@ export class CFGGenerator {
     }
     
     // 2. Condition (Loop Header)
-    const loopHeader = this.newBlock();
-    if (forStmt.condition) {
-      // 将条件表达式包装为ExpressionStatement
-      const conditionStmt: ExpressionStatement = {
-        type: StatementType.EXPRESSION_STATEMENT,
-        expression: forStmt.condition
-      };
-      loopHeader.statements.push(conditionStmt);
-    }
+    const loopHeader = forStmt.condition 
+      ? this.createConditionBlock(forStmt.condition)
+      : this.newBlock();
     blocks.push(loopHeader);
     this.connectBlocks(initExitBlock, loopHeader);
 
@@ -530,100 +594,126 @@ export class CFGGenerator {
     entryBlock: BasicBlock, 
     exitBlock: BasicBlock
   ): { blocks: BasicBlock[]; edges: { from: string; to: string }[] } {
-    // 1. 识别空块（除了入口块和出口块）
-    const emptyBlocks = blocks.filter(block => 
-      !block.isEntry && 
-      !block.isExit && 
-      block.statements.length === 0
-    );
+    // 1. 移除空块
+    const optimizedBlocks = this.removeEmptyBlocks(blocks);
     
-    // 2. 创建块映射表
-    const blockMap = new Map<string, BasicBlock>();
-    blocks.forEach(block => blockMap.set(block.id, block));
+    // 5. 合并可合并的基本块
+    const mergedBlocks = this.mergeBlocks(optimizedBlocks, entryBlock, exitBlock);
     
-    // 3. 为空块找到替代块
-    const replacementMap = new Map<string, string>();
-    
-    for (const emptyBlock of emptyBlocks) {
-      // 找到空块的前驱和后继
-      const predecessors = emptyBlock.predecessors;
-      const successors = emptyBlock.successors;
-      
-      if (predecessors.length === 1 && successors.length === 1) {
-        // 简单情况：一个前驱，一个后继，直接连接
-        const pred = predecessors[0]!;
-        const succ = successors[0]!;
-        replacementMap.set(emptyBlock.id, succ.id);
-        
-        // 更新前驱的后继，保持顺序
-        const emptyBlockIndex = pred.successors.findIndex(s => s.id === emptyBlock.id);
-        pred.successors = pred.successors.filter(s => s.id !== emptyBlock.id);
-        if (!pred.successors.includes(succ)) {
-          // 在原来的位置插入新的后继，保持顺序
-          if (emptyBlockIndex >= 0 && emptyBlockIndex < pred.successors.length) {
-            pred.successors.splice(emptyBlockIndex, 0, succ);
-    } else {
-            pred.successors.push(succ);
-          }
-        }
-        
-        // 更新后继的前驱
-        succ.predecessors = succ.predecessors.filter(p => p.id !== emptyBlock.id);
-        if (!succ.predecessors.includes(pred)) {
-          succ.predecessors.push(pred);
-        }
-      } else if (predecessors.length > 0 && successors.length === 1) {
-        // 多个前驱，一个后继：所有前驱直接连接到后继
-        const succ = successors[0]!;
-        replacementMap.set(emptyBlock.id, succ.id);
-        
-        for (const pred of predecessors) {
-          pred.successors = pred.successors.filter(s => s.id !== emptyBlock.id);
-          if (!pred.successors.includes(succ)) {
-            pred.successors.push(succ);
-          }
-          
-          succ.predecessors = succ.predecessors.filter(p => p.id !== emptyBlock.id);
-          if (!succ.predecessors.includes(pred)) {
-            succ.predecessors.push(pred);
-          }
-        }
-      } else if (predecessors.length === 1 && successors.length > 1) {
-        // 一个前驱，多个后继：前驱直接连接到所有后继
-        const pred = predecessors[0]!;
-        replacementMap.set(emptyBlock.id, pred.id);
-        
-        for (const succ of successors) {
-          pred.successors = pred.successors.filter(s => s.id !== emptyBlock.id);
-          if (!pred.successors.includes(succ)) {
-            pred.successors.push(succ);
-          }
-          
-          succ.predecessors = succ.predecessors.filter(p => p.id !== emptyBlock.id);
-          if (!succ.predecessors.includes(pred)) {
-            succ.predecessors.push(pred);
-          }
-        }
-      }
-    }
-    
-    // 4. 过滤掉空块
-    const optimizedBlocks = blocks.filter(block => 
-      !emptyBlocks.includes(block)
-    );
-    
-    // 5. 重新构建边
+    // 6. 重新构建边（去重，避免重复边）
     const optimizedEdges: { from: string; to: string }[] = [];
-    for (const block of optimizedBlocks) {
+    const edgeSet = new Set<string>();
+    for (const block of mergedBlocks) {
       for (const successor of block.successors) {
-        optimizedEdges.push({ from: block.id, to: successor.id });
+        const edgeKey = `${block.id}→${successor.id}`;
+        if (!edgeSet.has(edgeKey)) {
+          edgeSet.add(edgeKey);
+          optimizedEdges.push({ from: block.id, to: successor.id });
+        }
       }
     }
     
     return {
-      blocks: optimizedBlocks,
+      blocks: mergedBlocks,
       edges: optimizedEdges
     };
+  }
+
+  /**
+   * 合并可合并的基本块
+   * 合并条件：块A只有一个后继块B，且块B只有一个前驱块A
+   * 
+   * 合并规则：
+   * - 入口块可以被合并（保持入口标记）
+   * - 出口块可以被合并到其他块（继承出口标记）
+   * - 出口块不作为"当前块"参与合并判断
+   */
+  private mergeBlocks(
+    blocks: BasicBlock[], 
+    entryBlock: BasicBlock, 
+    exitBlock: BasicBlock
+  ): BasicBlock[] {
+    let currentBlocks = [...blocks];
+    let changed = true;
+    
+    // 重复合并直到没有更多可合并的块
+    while (changed) {
+      changed = false;
+      const blocksToRemove = new Set<BasicBlock>();
+      
+      for (const block of currentBlocks) {
+        // 跳过出口块和已标记删除的块
+        if (block.isExit || blocksToRemove.has(block)) {
+          continue;
+        }
+        
+        // 核心合并条件检查：块A只有一个后继块B，且块B只有一个前驱块A
+        if (this.canMerge(block)) {
+          const successor = block.successors[0]!;
+          
+          // 执行合并操作
+          this.mergeBlockInto(block, successor);
+          
+          // 标记后继块为待删除
+          blocksToRemove.add(successor);
+          changed = true;
+        }
+      }
+      
+      // 移除已合并的块
+      if (blocksToRemove.size > 0) {
+        currentBlocks = currentBlocks.filter(block => !blocksToRemove.has(block));
+      }
+    }
+    
+    return currentBlocks;
+  }
+
+  /**
+   * 检查块是否可以与它的后继合并
+   * 条件：块A只有一个后继块B，且块B只有一个前驱块A
+   */
+  private canMerge(block: BasicBlock): boolean {
+    // 块必须有且仅有一个后继
+    if (block.successors.length !== 1) {
+      return false;
+    }
+    
+    const successor = block.successors[0]!;
+    
+    // 后继必须有且仅有一个前驱，且这个前驱必须是当前块
+    return successor.predecessors.length === 1 && 
+           successor.predecessors[0]!.id === block.id;
+  }
+
+  /**
+   * 将后继块合并到当前块中
+   */
+  private mergeBlockInto(block: BasicBlock, successor: BasicBlock): void {
+    // 1. 合并语句：将后继块的所有语句追加到当前块
+    block.statements.push(...successor.statements);
+    
+    // 2. 继承特殊标记：如果后继是出口块，当前块成为出口块
+    if (successor.isExit) {
+      block.isExit = true;
+    }
+    
+    // 3. 更新后继关系：当前块的后继更新为后继块的后继
+    const oldSuccessors = [...successor.successors];
+    block.successors = oldSuccessors;
+    
+    // 4. 更新所有新后继块的前驱关系
+    for (const newSucc of oldSuccessors) {
+      // 移除后继块作为前驱
+      const predIndex = newSucc.predecessors.findIndex(p => p.id === successor.id);
+      if (predIndex >= 0) {
+        newSucc.predecessors.splice(predIndex, 1);
+      }
+      // 添加当前块作为前驱（如果还没有）
+      if (!newSucc.predecessors.includes(block)) {
+        newSucc.predecessors.push(block);
+      }
+    }
   }
 
   public visualize(cfg: ControlFlowGraph): string {
@@ -899,45 +989,5 @@ export class CFGVisualizer {
     }
   }
 
-  private astToJsonString(ast: ASTNode): string {
-    // 创建一个简化的AST表示，只包含关键信息
-    const simplified = this.simplifyAST(ast);
-    return JSON.stringify(simplified, null, 2).replace(/\n/g, ' ').replace(/\s+/g, ' ');
-  }
-
-  private simplifyAST(ast: ASTNode): Record<string, unknown> {
-    if (!ast || typeof ast !== 'object') {
-      return ast as unknown as Record<string, unknown>;
-    }
-
-    const result: Record<string, unknown> = {};
-    const astAny = ast as unknown as Record<string, unknown>;
-    
-    // 保留关键字段
-    if (astAny.type) result.type = astAny.type;
-    if (astAny.name) result.name = astAny.name;
-    if (astAny.value !== undefined) result.value = astAny.value;
-    if (astAny.operator) result.operator = astAny.operator;
-    
-    // 递归处理子节点
-    if ('left' in astAny && astAny.left) result.left = this.simplifyAST(astAny.left as ASTNode);
-    if ('right' in astAny && astAny.right) result.right = this.simplifyAST(astAny.right as ASTNode);
-    if ('operand' in astAny && astAny.operand) result.operand = this.simplifyAST(astAny.operand as ASTNode);
-    if ('condition' in astAny && astAny.condition) result.condition = this.simplifyAST(astAny.condition as ASTNode);
-    if ('target' in astAny && astAny.target) result.target = this.simplifyAST(astAny.target as ASTNode);
-    if ('callee' in astAny && astAny.callee) result.callee = this.simplifyAST(astAny.callee as ASTNode);
-    if ('expression' in astAny && astAny.expression) result.expression = this.simplifyAST(astAny.expression as ASTNode);
-    if ('initializer' in astAny && astAny.initializer) result.initializer = this.simplifyAST(astAny.initializer as ASTNode);
-    
-    // 处理数组
-    if ('statements' in ast && Array.isArray(astAny.statements)) {
-      result.statements = astAny.statements.map((stmt: unknown) => this.simplifyAST(stmt as ASTNode));
-    }
-    if ('arguments' in ast && Array.isArray(astAny.arguments)) {
-      result.arguments = astAny.arguments.map((arg: unknown) => this.simplifyAST(arg as ASTNode));
-    }
-    
-    return result;
-  }
 }
 

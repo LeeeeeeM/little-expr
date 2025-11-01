@@ -1,11 +1,13 @@
-{
+int a() {
   let a = 1;
   if (a > 0) {
     let x = 2;
     if (x > 1) {
       let y = 3;
+      a = 111;
     }
     let z = 4;
   }
   let b = 5;
+  return a;
 }

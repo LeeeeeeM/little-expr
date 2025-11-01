@@ -87,15 +87,16 @@ export class CheckpointTransformer {
       this.transformStatement(stmt, currentDepth + 1)
     );
 
-    // 2. 收集当前层的直接变量声明名
+    // 2. 收集当前层的直接变量声明名（按声明顺序）
     //    只收集直接的 VariableDeclaration/LetDeclaration
     //    不包括嵌套 BlockStatement 内的变量
-    const variableNames = new Set<string>();
+    const variableNames: string[] = [];
     for (const stmt of processedStatements) {
       if (stmt.type === 'VariableDeclaration' || stmt.type === 'LetDeclaration') {
         const varName = (stmt as any).name;
-        if (varName) {
-          variableNames.add(varName);
+        if (varName && !variableNames.includes(varName)) {
+          // 按声明顺序添加，避免重复
+          variableNames.push(varName);
         }
       }
       // 注意：嵌套的 BlockStatement 已经被包裹了 StartCheckPoint/EndCheckPoint

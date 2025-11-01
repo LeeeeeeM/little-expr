@@ -1,90 +1,66 @@
-// 作用域管理器 - 基于 separated.ts 的设计
+// 作用域管理器 - 简化设计，统一处理所有作用域
 export class ScopeManager {
-  private scopes: Map<string, number>[] = [new Map()]; // 作用域栈
-  private functionStackOffset = 0; // 函数级变量栈偏移
+  private scopes: Map<string, number>[] = []; // 作用域栈（不再有默认的根作用域）
   private functionParameters: string[] = []; // 函数参数列表
-  private declaredVarCount = 0; // 累计已声明的块级变量数
-  private totalAllocated = 0; // 累计总分配的块级空间数（所有 scope 的 sub esp 之和）
-  private totalAllocatedStack: number[] = []; // 进入每个 scope 时的累计总分配数（用于 exitScope 恢复）
-  private declaredCountStack: number[] = []; // 进入每个 scope 时的已声明数（用于 exitScope 恢复）
   private forLoopVariables: Map<string, number> = new Map(); // for循环变量
   private inForLoop = false; // 是否在for循环中
   
-  // 进入新作用域
-  // newAllocated: 当前 scope 新分配的空间数（sub esp, n 中的 n）
-  enterScope(newAllocated: number = 0): void {
-    this.scopes.push(new Map());
+  /**
+   * 进入新作用域
+   * @param variableNames 该作用域内的变量名数组（按声明顺序）
+   * @returns 返回分配的栈空间大小（变量数）
+   */
+  enterScope(variableNames: string[]): number {
+    // 计算前面所有作用域的总变量数
+    const prevScopeVarCount = this.getTotalPreviousVarCount();
     
-    // 保存进入 scope 时的状态（用于 exitScope 恢复）
-    this.totalAllocatedStack.push(this.totalAllocated);
-    this.declaredCountStack.push(this.declaredVarCount);
+    // 创建新作用域并分配 offset
+    const newScope = new Map<string, number>();
+    for (let i = 0; i < variableNames.length; i++) {
+      const varName = variableNames[i]!;
+      // offset = -(前面所有作用域的总变量数 + 本作用域内的顺序索引 + 1)
+      const offset = -(prevScopeVarCount + i + 1);
+      newScope.set(varName, offset);
+    }
     
-    // 更新累计总分配数
-    this.totalAllocated += newAllocated;
+    // 压入作用域栈
+    this.scopes.push(newScope);
+    
+    return variableNames.length;
   }
   
-  // 退出当前作用域
+  /**
+   * 退出当前作用域
+   */
   exitScope(): void {
-    if (this.scopes.length > 1) {
+    if (this.scopes.length > 0) {
       this.scopes.pop();
-      
-      // 从栈中恢复进入该 scope 前的状态
-      const previousTotalAllocated = this.totalAllocatedStack.pop();
-      const previousDeclared = this.declaredCountStack.pop();
-      
-      if (previousTotalAllocated !== undefined && previousDeclared !== undefined) {
-        this.totalAllocated = previousTotalAllocated;
-        this.declaredVarCount = previousDeclared;
-      }
     }
   }
   
-  // 设置函数参数
+  /**
+   * 计算前面所有作用域的总变量数
+   */
+  private getTotalPreviousVarCount(): number {
+    let total = 0;
+    for (const scope of this.scopes) {
+      total += scope.size;
+    }
+    return total;
+  }
+  
+  /**
+   * 设置函数参数
+   */
   setFunctionParameters(parameters: string[]): void {
     this.functionParameters = parameters;
   }
   
-  // 声明函数级变量
-  declareFunctionVariable(name: string): number {
-    // 检查是否已经存在同名变量
-    if (this.scopes[0]!.has(name)) {
-      // 如果已经存在，不覆盖，直接返回现有的偏移
-      const existingOffset = this.scopes[0]!.get(name)!;
-      return existingOffset;
-    }
-    
-    const offset = --this.functionStackOffset; // 负数偏移
-    this.scopes[0]!.set(name, offset); // 函数级变量存储在根作用域
-    return offset;
-  }
-  
-  // 声明块级变量
-  declareBlockVariable(name: string): number {
-    const currentScope = this.scopes[this.scopes.length - 1]!;
-    
-    // 计算 offset
-    // offset = -(函数级变量数 + 进入 scope 前的总分配数 + 当前 scope 中已声明的变量数 + 1)
-    // totalAllocatedStack 的最后一个元素是进入当前 scope 前的总分配数
-    const functionVarCount = this.getFunctionVariableCount();
-    const totalAllocatedBefore = this.totalAllocatedStack.length > 0 
-      ? this.totalAllocatedStack[this.totalAllocatedStack.length - 1]!
-      : 0;
-    const declaredBefore = this.declaredCountStack.length > 0
-      ? this.declaredCountStack[this.declaredCountStack.length - 1]!
-      : 0;
-    const currentScopeDeclared = this.declaredVarCount - declaredBefore;
-    const offset = -(functionVarCount + totalAllocatedBefore + currentScopeDeclared + 1);
-    
-    // 递增已声明数
-    this.declaredVarCount++;
-    
-    currentScope.set(name, offset);
-    return offset;
-  }
-
-  
-  // 查找变量
-  getVariable(name: string): number | null {
+  /**
+   * 获取变量的 offset
+   * 在生成代码时，变量应该已经在作用域中（通过 enterScope 分配）
+   */
+  getVariableOffset(name: string): number | null {
     // 首先检查for循环变量
     if (this.inForLoop && this.forLoopVariables.has(name)) {
       return this.forLoopVariables.get(name)!;
@@ -98,25 +74,38 @@ export class ScopeManager {
       }
     }
     
+    // 检查是否是函数参数
+    const paramIndex = this.functionParameters.indexOf(name);
+    if (paramIndex !== -1) {
+      return paramIndex + 2; // 参数从 ebp+2 开始（跳过返回地址）
+    }
+    
     return null;
   }
+
   
-  // 重置（用于新函数）
+  /**
+   * 查找变量（兼容旧接口）
+   */
+  getVariable(name: string): number | null {
+    return this.getVariableOffset(name);
+  }
+  
+  /**
+   * 重置（用于新函数）
+   */
   reset(): void {
-    this.scopes = [new Map()];
-    this.functionStackOffset = 0;
+    this.scopes = [];
     this.functionParameters = [];
-    this.declaredVarCount = 0;
-    this.totalAllocated = 0;
-    this.totalAllocatedStack = [];
-    this.declaredCountStack = [];
     this.forLoopVariables.clear();
     this.inForLoop = false;
   }
   
-  // 获取函数级变量数量
-  getFunctionVariableCount(): number {
-    return Math.abs(this.functionStackOffset);
+  /**
+   * 获取所有作用域的总变量数（用于释放栈空间）
+   */
+  getTotalVarCount(): number {
+    return this.getTotalPreviousVarCount();
   }
   
   // 进入for循环作用域
@@ -130,19 +119,25 @@ export class ScopeManager {
     this.forLoopVariables.clear();
   }
   
-  // 检查是否在块作用域中
+  /**
+   * 检查是否在块作用域中
+   */
   isInBlock(): boolean {
-    return this.scopes.length > 1;
+    return this.scopes.length > 0;
   }
   
-  // 获取当前作用域
-  getCurrentScope(): Map<string, number> {
-    return this.scopes[this.scopes.length - 1]!;
+  /**
+   * 获取当前作用域
+   */
+  getCurrentScope(): Map<string, number> | null {
+    return this.scopes.length > 0 ? this.scopes[this.scopes.length - 1]! : null;
   }
   
-  // 查找函数级变量（用于 return 语句）
+  /**
+   * 查找变量（从外层到内层，用于 return 语句查找最外层变量）
+   */
   getFunctionLevelVariable(name: string): number | null {
-    // 查找最外层的同名变量（从函数级作用域开始）
+    // 从外层到内层查找
     for (let i = 0; i < this.scopes.length; i++) {
       const scope = this.scopes[i];
       if (scope && scope.has(name)) {
@@ -159,11 +154,13 @@ export class ScopeManager {
     return null;
   }
 
-  // 获取所有变量信息
+  /**
+   * 获取所有变量信息
+   */
   getAllVariables(): Map<string, { offset: number }> {
     const result = new Map<string, { offset: number }>();
     
-    // 遍历所有作用域
+    // 遍历所有作用域（从内层到外层，内层优先）
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       const scope = this.scopes[i];
       if (scope) {
@@ -185,6 +182,24 @@ export class ScopeManager {
   saveSnapshot(): Map<string, number>[] {
     // 深拷贝 scopes 数组和每个 Map
     return this.scopes.map(scope => {
+      const scopeCopy = new Map<string, number>();
+      for (const [name, offset] of scope) {
+        scopeCopy.set(name, offset);
+      }
+      return scopeCopy;
+    });
+  }
+
+  /**
+   * 从快照恢复作用域链
+   * @param snapshot 之前保存的快照
+   */
+  restoreSnapshot(snapshot: Map<string, number>[]): void {
+    // 清空当前作用域栈
+    this.scopes = [];
+    
+    // 深拷贝快照中的每个作用域
+    this.scopes = snapshot.map(scope => {
       const scopeCopy = new Map<string, number>();
       for (const [name, offset] of scope) {
         scopeCopy.set(name, offset);

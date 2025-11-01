@@ -177,4 +177,19 @@ export class ScopeManager {
     
     return result;
   }
+
+  /**
+   * 保存当前作用域链的快照
+   * 返回作用域栈（scopes）的深拷贝
+   */
+  saveSnapshot(): Map<string, number>[] {
+    // 深拷贝 scopes 数组和每个 Map
+    return this.scopes.map(scope => {
+      const scopeCopy = new Map<string, number>();
+      for (const [name, offset] of scope) {
+        scopeCopy.set(name, offset);
+      }
+      return scopeCopy;
+    });
+  }
 }

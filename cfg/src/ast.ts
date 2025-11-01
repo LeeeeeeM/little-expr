@@ -132,6 +132,21 @@ export interface EmptyStatement extends ASTNode {
   type: 'EmptyStatement';
 }
 
+// 作用域检查点标记
+export interface StartCheckPoint extends ASTNode {
+  type: 'StartCheckPoint';
+  scopeId: string;        // 唯一标识，用于与 EndCheckPoint 配对
+  depth: number;          // 嵌套深度（可选，用于调试）
+  variableNames: Set<string>;  // 该作用域内直接声明的变量名集合
+}
+
+export interface EndCheckPoint extends ASTNode {
+  type: 'EndCheckPoint';
+  scopeId: string;        // 对应 StartCheckPoint 的 scopeId
+  depth: number;          // 必须与对应的 StartCheckPoint 一致
+  variableNames: Set<string>;  // 必须与对应的 StartCheckPoint 一致（用于验证）
+}
+
 // 语句联合类型
 export type Statement = 
   | ExpressionStatement
@@ -146,7 +161,9 @@ export type Statement =
   | BreakStatement
   | ContinueStatement
   | BlockStatement
-  | EmptyStatement;
+  | EmptyStatement
+  | StartCheckPoint
+  | EndCheckPoint;
 
 // 程序根节点
 export interface Program extends ASTNode {
@@ -383,6 +400,36 @@ export class ASTFactory {
     };
   }
 
+  static createStartCheckPoint(
+    scopeId: string,
+    depth: number,
+    variableNames: Set<string>,
+    position?: number
+  ): StartCheckPoint {
+    return {
+      type: 'StartCheckPoint',
+      scopeId,
+      depth,
+      variableNames,
+      position
+    };
+  }
+
+  static createEndCheckPoint(
+    scopeId: string,
+    depth: number,
+    variableNames: Set<string>,
+    position?: number
+  ): EndCheckPoint {
+    return {
+      type: 'EndCheckPoint',
+      scopeId,
+      depth,
+      variableNames,
+      position
+    };
+  }
+
   static createProgram(statements: Statement[], position?: number): Program {
     return {
       type: 'Program',
@@ -419,4 +466,6 @@ export interface ASTVisitor<T> {
   visitContinueStatement(node: ContinueStatement): T;
   visitBlockStatement(node: BlockStatement): T;
   visitEmptyStatement(node: EmptyStatement): T;
+  visitStartCheckPoint(node: StartCheckPoint): T;
+  visitEndCheckPoint(node: EndCheckPoint): T;
 }

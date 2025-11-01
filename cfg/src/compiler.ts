@@ -2,6 +2,7 @@ import type { Program } from './ast';
 import { ScopeManager } from './scope-manager';
 import { CFGGenerator, CFGVisualizer } from './cfg-generator';
 import { AssemblyGenerator } from './assembly-generator';
+import { CheckpointTransformer } from './checkpoint-transformer';
 
 // 编译器主类
 export class Compiler {
@@ -17,9 +18,14 @@ export class Compiler {
   // 编译程序
   compile(program: Program, options: CompileOptions = {}): CompileResult {
     try {
+      // 0. AST 转换：为 BlockStatement 添加 StartCheckPoint/EndCheckPoint 标记
+      console.log('🔧 转换 AST（添加作用域标记）...');
+      const transformer = new CheckpointTransformer();
+      const transformedProgram = transformer.transform(program);
+      
       // 1. 生成CFG（作用域信息会在CFG生成过程中获取）
       console.log('📊 生成控制流图...');
-      const cfgs = this.cfgGenerator.generate(program);
+      const cfgs = this.cfgGenerator.generate(transformedProgram);
       // 打印每个函数的 CFG 可视化
       const viz = new CFGVisualizer();
       for (const cfg of cfgs) {

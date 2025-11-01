@@ -1,11 +1,19 @@
-import type { Statement, Expression, BinaryExpression, UnaryExpression, NumberLiteral, Identifier, AssignmentStatement, ReturnStatement } from './ast';
+import type { Statement, Expression, BinaryExpression, UnaryExpression, NumberLiteral, Identifier, AssignmentStatement, ReturnStatement, StartCheckPoint, EndCheckPoint } from './ast';
 import type { BasicBlock, ControlFlowGraph } from './cfg-generator';
 import type { ScopeManager } from './scope-manager';
 import { StatementType } from './types';
 
+// 作用域信息（用于验证配对）
+interface ScopeInfo {
+  id: string;
+  variableNames: Set<string>;
+  depth: number;
+}
+
 // 汇编生成器 - 基于 separated.ts 的方法
 export class AssemblyGenerator {
   private scopeManager: ScopeManager;
+  private scopeStack: ScopeInfo[] = [];  // 作用域栈，用于验证 StartCheckPoint/EndCheckPoint 配对
 
   constructor(scopeManager: ScopeManager) {
     this.scopeManager = scopeManager;
@@ -15,6 +23,7 @@ export class AssemblyGenerator {
   generateAssembly(cfg: ControlFlowGraph): string {
     // 重置作用域管理器
     this.scopeManager.reset();
+    this.scopeStack = [];  // 重置作用域栈
     
     const lines: string[] = [];
     
@@ -25,7 +34,7 @@ export class AssemblyGenerator {
     // 先找到入口块并预先声明函数级变量
     const entryBlock = cfg.blocks.find(b => b.isEntry);
     if (entryBlock) {
-      // 声明函数级变量
+      // 声明函数级变量（跳过 StartCheckPoint/EndCheckPoint）
       for (const stmt of entryBlock.statements) {
         if (stmt.type === StatementType.VARIABLE_DECLARATION || stmt.type === StatementType.LET_DECLARATION) {
           const varName = (stmt as any).name;
@@ -47,16 +56,87 @@ export class AssemblyGenerator {
 
   // 按照 separated.ts 的方法生成语句并管理作用域
   private generateStatementsWithScope(blocks: BasicBlock[], lines: string[]): void {
+    // 为每个基本块计算进入时的作用域栈状态
+    const blockScopeStates = new Map<string, ScopeInfo[]>();
+    
+    // 从入口块开始，DFS 传播作用域状态
+    const processed = new Set<string>();
+    const worklist: BasicBlock[] = [];
+    
+    // 找到入口块
+    const entryBlock = blocks.find(b => b.isEntry);
+    if (entryBlock) {
+      blockScopeStates.set(entryBlock.id, []);
+      worklist.push(entryBlock);
+    }
+    
+    // BFS 传播作用域状态
+    while (worklist.length > 0) {
+      const block = worklist.shift()!;
+      if (processed.has(block.id)) continue;
+      
+      processed.add(block.id);
+      const enteringScopeStack = blockScopeStates.get(block.id) || [];
+      
+      // 计算退出时的作用域栈
+      let exitingScopeStack = [...enteringScopeStack];
+      for (const stmt of block.statements) {
+        if (stmt.type === StatementType.START_CHECK_POINT) {
+          const cp = stmt as StartCheckPoint;
+          exitingScopeStack.push({
+            id: cp.scopeId,
+            variableNames: cp.variableNames,
+            depth: cp.depth
+          });
+        } else if (stmt.type === StatementType.END_CHECK_POINT) {
+          const cp = stmt as EndCheckPoint;
+          // 查找匹配的作用域
+          const foundIndex = exitingScopeStack.findIndex(s => s.id === cp.scopeId);
+          if (foundIndex !== -1) {
+            exitingScopeStack = exitingScopeStack.slice(0, foundIndex);
+          } else {
+            // 如果没找到，说明作用域栈可能不同步，但我们仍然继续
+            console.warn(`⚠️  在块 ${block.id} 中，EndCheckPoint ${cp.scopeId} 不在作用域栈中`);
+          }
+        }
+      }
+      
+      // 传播到后继块
+      for (const successor of block.successors) {
+        if (!blockScopeStates.has(successor.id)) {
+          blockScopeStates.set(successor.id, exitingScopeStack);
+          worklist.push(successor);
+        } else {
+          // 多个前驱汇聚：验证作用域栈是否一致
+          const existingStack = blockScopeStates.get(successor.id)!;
+          if (JSON.stringify(existingStack) !== JSON.stringify(exitingScopeStack)) {
+            // 如果不同，取较短的栈（更保守的策略）
+            if (exitingScopeStack.length < existingStack.length) {
+              blockScopeStates.set(successor.id, exitingScopeStack);
+            }
+          }
+        }
+      }
+    }
+    
+    // 生成代码
     for (const block of blocks) {
       lines.push(`${block.id}:`);
       
-      // 检查是否需要为块级变量分配栈空间
+      // 恢复该块进入时的作用域栈状态
+      const enteringScopeStack = blockScopeStates.get(block.id) || [];
+      this.scopeStack = [...enteringScopeStack];
+      
+      // 分离不同类型的语句
       const blockVars: any[] = [];
+      const checkPoints: any[] = [];
       const otherStmts: any[] = [];
       
       for (const stmt of block.statements) {
         if (stmt.type === StatementType.VARIABLE_DECLARATION || stmt.type === StatementType.LET_DECLARATION) {
           blockVars.push(stmt);
+        } else if (stmt.type === StatementType.START_CHECK_POINT || stmt.type === StatementType.END_CHECK_POINT) {
+          checkPoints.push(stmt);
         } else {
           otherStmts.push(stmt);
         }
@@ -69,35 +149,28 @@ export class AssemblyGenerator {
           lines.push(`  sub esp, ${blockVars.length}            ; 为${blockVars.length}个函数级变量分配栈空间`);
         }
         
-        // 生成函数级变量初始化（已在入口块预分配，不再重复分配栈空间）
-        for (const stmt of blockVars) {
-          this.generateStatementWithScope(stmt, lines, false, /*preallocated*/ true);
-        }
-        
-        // 生成其他语句
-        for (const statement of otherStmts) {
-          this.generateStatementWithScope(statement, lines);
+        // 按顺序处理所有语句（包括 CheckPoint）
+        for (const stmt of block.statements) {
+          this.generateStatementWithScope(stmt, lines, false, /*preallocated*/ stmt.type === StatementType.VARIABLE_DECLARATION || stmt.type === StatementType.LET_DECLARATION);
         }
       } else {
-        // 非 entry block：先为本基本块最外层的声明统一分配，再逐条生成
-        // 这使得本块内的最外层变量共享同一词法层次，内层块再单独分配
-        if (blockVars.length > 0) {
-          this.scopeManager.enterScope(blockVars.length);
-          lines.push(`  sub esp, ${blockVars.length}            ; 为${blockVars.length}个块级变量分配栈空间`);
-        }
-
-        // 按照原始顺序处理语句（变量声明可能在其他语句之间）
+        // 非 entry block：按照原始顺序处理所有语句（包括 CheckPoint）
+        // CheckPoint 会处理作用域的进入/退出
+        // 注意：如果块内有 CheckPoint，就不需要手动处理 blockVars 了（CheckPoint 已处理）
+        // 如果没有 CheckPoint，才需要手动处理（向后兼容旧代码）
+        const hasCheckPoints = checkPoints.length > 0;
         const isConditionalBranch = block.successors.length > 1;
         const lastStmt = block.statements[block.statements.length - 1];
         const isLastStmtComparison = lastStmt && 
           lastStmt.type === StatementType.EXPRESSION_STATEMENT &&
           (lastStmt as any).expression?.type === 'BinaryExpression' &&
           ['==', '!=', '<', '<=', '>', '>='].includes((lastStmt as any).expression?.operator);
-        
-        // 检查是否是 for 循环的初始化块（需要保留分配直到循环结束）
-        const isForLoopInitBlock = block.successors.length === 1 && 
-          block.successors[0]?.successors.length === 2 &&
-          block.successors[0]?.predecessors.length > 1;
+
+        // 如果没有 CheckPoint，使用旧逻辑（向后兼容）
+        if (!hasCheckPoints && blockVars.length > 0) {
+          this.scopeManager.enterScope(blockVars.length);
+          lines.push(`  sub esp, ${blockVars.length}            ; 为${blockVars.length}个块级变量分配栈空间`);
+        }
 
         for (let i = 0; i < block.statements.length; i++) {
           const stmt = block.statements[i]!;
@@ -107,9 +180,17 @@ export class AssemblyGenerator {
           this.generateStatementWithScope(stmt, lines, isLastAndConditional);
         }
 
-        if (blockVars.length > 0 && !isForLoopInitBlock) {
-          lines.push(`  add esp, ${blockVars.length}            ; 释放块级变量栈空间`);
-          this.scopeManager.exitScope();
+        // 如果没有 CheckPoint，手动释放（向后兼容）
+        if (!hasCheckPoints && blockVars.length > 0) {
+          // 检查是否是 for 循环的初始化块（需要保留分配直到循环结束）
+          const isForLoopInitBlock = block.successors.length === 1 && 
+            block.successors[0]?.successors.length === 2 &&
+            block.successors[0]?.predecessors.length > 1;
+          
+          if (!isForLoopInitBlock) {
+            lines.push(`  add esp, ${blockVars.length}            ; 释放块级变量栈空间`);
+            this.scopeManager.exitScope();
+          }
         }
       }
       
@@ -210,6 +291,12 @@ export class AssemblyGenerator {
   // forCondition: 如果为 true，表示用于条件跳转，不生成 setXX 和 and 指令
   private generateStatementWithScope(statement: any, lines: string[], forCondition: boolean = false, preallocated: boolean = false): void {
     switch (statement.type) {
+      case StatementType.START_CHECK_POINT:
+        this.generateStartCheckPoint(statement as StartCheckPoint, lines);
+        break;
+      case StatementType.END_CHECK_POINT:
+        this.generateEndCheckPoint(statement as EndCheckPoint, lines);
+        break;
       case StatementType.VARIABLE_DECLARATION:
         this.generateVariableDeclarationWithScope(statement, lines, preallocated);
         break;
@@ -240,6 +327,80 @@ export class AssemblyGenerator {
       default:
         break;
     }
+  }
+
+  // 处理 StartCheckPoint：进入新作用域
+  private generateStartCheckPoint(checkPoint: StartCheckPoint, lines: string[]): void {
+    const varCount = checkPoint.variableNames.size;
+    // 分配栈空间
+    if (varCount > 0) {
+      const varList = Array.from(checkPoint.variableNames).join(', ');
+      lines.push(`  sub esp, ${varCount}            ; 进入作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, vars: [${varList}])`);
+      this.scopeManager.enterScope(varCount);
+    } else {
+      lines.push(`  ; 进入作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, 无变量)`);
+    }
+    
+    // 更新作用域栈
+    this.scopeStack.push({
+      id: checkPoint.scopeId,
+      variableNames: checkPoint.variableNames,
+      depth: checkPoint.depth
+    });
+  }
+
+  // 处理 EndCheckPoint：退出作用域
+  private generateEndCheckPoint(checkPoint: EndCheckPoint, lines: string[]): void {
+    const varCount = checkPoint.variableNames.size;
+    // 从作用域栈中查找匹配的作用域
+    const foundIndex = this.scopeStack.findIndex(s => s.id === checkPoint.scopeId);
+    
+    if (foundIndex === -1) {
+      // 如果没找到，可能是作用域栈状态不同步（已在传播阶段处理过）
+      // 但我们仍然生成代码以继续执行
+      console.warn(`⚠️  EndCheckPoint ${checkPoint.scopeId} 不在作用域栈中`);
+      if (varCount > 0) {
+        const varList = Array.from(checkPoint.variableNames).join(', ');
+        lines.push(`  add esp, ${varCount}            ; 退出作用域 ${checkPoint.scopeId} [警告：状态可能不同步] (vars: [${varList}])`);
+        try {
+          this.scopeManager.exitScope();
+        } catch (e) {
+          // 忽略错误
+        }
+      }
+      return;
+    }
+    
+    // 验证 variableNames 是否一致
+    const foundScope = this.scopeStack[foundIndex]!;
+    const foundVarSet = foundScope.variableNames;
+    const expectedVarSet = checkPoint.variableNames;
+    
+    // 比较两个 Set 是否相等
+    if (foundVarSet.size !== expectedVarSet.size || 
+        !Array.from(foundVarSet).every(v => expectedVarSet.has(v))) {
+      const foundList = Array.from(foundVarSet).sort().join(', ');
+      const expectedList = Array.from(expectedVarSet).sort().join(', ');
+      throw new Error(
+        `VariableNames mismatch for scope ${checkPoint.scopeId}: expected [${expectedList}], got [${foundList}]`
+      );
+    }
+    
+    // 释放栈空间
+    if (varCount > 0) {
+      const varList = Array.from(checkPoint.variableNames).join(', ');
+      lines.push(`  add esp, ${varCount}            ; 退出作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, vars: [${varList}])`);
+      // 退出从 foundIndex 到栈顶的所有作用域
+      const scopesToExit = this.scopeStack.length - foundIndex;
+      for (let i = 0; i < scopesToExit; i++) {
+        this.scopeManager.exitScope();
+      }
+    } else {
+      lines.push(`  ; 退出作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, 无变量)`);
+    }
+    
+    // 更新作用域栈：移除从 foundIndex 开始的所有作用域
+    this.scopeStack = this.scopeStack.slice(0, foundIndex);
   }
 
   // 生成块语句并管理作用域

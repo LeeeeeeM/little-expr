@@ -46,6 +46,10 @@ export enum StatementType {
   // 空语句
   EMPTY_STATEMENT = 'EmptyStatement',
   
+  // 作用域检查点
+  START_CHECK_POINT = 'StartCheckPoint',
+  END_CHECK_POINT = 'EndCheckPoint',
+  
   // 表达式节点（继承自原有）
   NUMBER_LITERAL = 'NumberLiteral',
   IDENTIFIER = 'Identifier',

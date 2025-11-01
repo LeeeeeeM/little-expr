@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 interface HeaderProps {
   selectedExpression: string;
@@ -48,9 +49,15 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
-          <h1 className="text-2xl font-bold text-gray-900">
-          🎯 栈式优先级爬升可视化
-          </h1>
+          <Link to="/" className="text-2xl font-bold text-gray-900 hover:text-gray-700">
+            🎯 栈式优先级爬升可视化
+          </Link>
+          <Link
+            to="/cfg"
+            className="px-3 py-1 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+          >
+            CFG 测试
+          </Link>
           
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">

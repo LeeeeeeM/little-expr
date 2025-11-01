@@ -341,8 +341,8 @@ export class AssemblyGenerator {
     if (currentScope && currentScope.has(varName)) {
       // 如果变量在当前作用域，但还没有声明，则查找外层作用域
       if (!this.declaredVariablesInCurrentBlock.has(varName)) {
-        // 从倒数第二个作用域开始查找（跳过当前作用域）
-        for (let i = scopes.length - 2; i >= 0; i--) {
+        // 从上一层作用域开始查找（跳过当前作用域,但考虑到 for，从当前开始查找）
+        for (let i = scopes.length - 1; i >= 0; i--) {
           const scope = scopes[i];
           if (scope && scope.has(varName)) {
             return scope.get(varName)!;
@@ -368,6 +368,28 @@ export class AssemblyGenerator {
    * 生成表达式语句
    */
   private generateExpressionStatement(exprStmt: any): void {
+    // 检查是否是赋值表达式（BinaryExpression with operator '='）
+    if (exprStmt.expression?.type === 'BinaryExpression' && exprStmt.expression.operator === '=') {
+      const assignment = exprStmt.expression;
+      const target = assignment.left;
+      if (target.type === 'Identifier') {
+        const varName = target.name;
+        // 生成右侧表达式的代码
+        const valueAsm = this.generateExpression(assignment.right);
+        if (valueAsm) {
+          this.lines.push(...this.addIndentToMultiLine(valueAsm));
+        }
+        // 查找变量 offset 并存储
+        const offset = this.getVariableOffsetForAssignment(varName);
+        if (offset !== null) {
+          this.lines.push(`  si ${offset}              ; 赋值给 ${varName}`);
+        } else {
+          this.lines.push(`  ; 未找到变量 ${varName}`);
+        }
+        return;
+      }
+    }
+    
     // 检查是否是条件表达式（用于条件跳转）
     const isCondition = exprStmt.expression?.type === 'BinaryExpression' &&
       ['==', '!=', '<', '<=', '>', '>='].includes(exprStmt.expression?.operator);
@@ -555,6 +577,10 @@ export class AssemblyGenerator {
     const cmpPart = `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\ncmp eax, ebx`;
     
     switch (binary.operator) {
+      case '=':
+        // 赋值表达式：只计算右侧值，存储操作在 generateExpressionStatement 中处理
+        // 返回右侧表达式的值（在 eax 中）
+        return rightAsm;
       case '+':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nadd eax, ebx`;
       case '-':

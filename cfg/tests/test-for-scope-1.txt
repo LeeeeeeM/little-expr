@@ -1,11 +1,12 @@
 int test1() {
+  let j = 0;
   for (int i = 0; i < 2; i = i+1) {
-    int j = 0;
     // i 在 for 循环作用域中
+    let i = 10;
     if (i > 0) {
         j = 5;
     }
   }
-  int i = 1;  // 应该可以，因为外部的 i 和循环内的 i 是不同的作用域
-  return i;
+  int i1 = 1;  // 应该可以，因为外部的 i 和循环内的 i 是不同的作用域
+  return i1;
 }

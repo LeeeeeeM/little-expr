@@ -539,10 +539,35 @@ export class CFGGenerator {
   ): { blocks: BasicBlock[]; entry: BasicBlock; exit: BasicBlock } {
     const blocks: BasicBlock[] = [];
     
+    // 检查 init 是否是变量声明，以及 body 是否包含 for 循环作用域的 StartCheckPoint
+    const initIsVarDecl = forStmt.init && 
+      (forStmt.init.type === StatementType.VARIABLE_DECLARATION || 
+       forStmt.init.type === StatementType.LET_DECLARATION);
+    let forLoopStartCheckPoint: Statement | null = null;
+    let forLoopEndCheckPoint: Statement | null = null;
+    
+    // 如果 body 是 BlockStatement，检查第一个和最后一个语句是否是 CheckPoint
+    if (forStmt.body.type === StatementType.BLOCK_STATEMENT && initIsVarDecl) {
+      const bodyStmts = (forStmt.body as BlockStatement).statements;
+      if (bodyStmts.length > 0 && bodyStmts[0]!.type === 'StartCheckPoint') {
+        forLoopStartCheckPoint = bodyStmts[0]!;
+      }
+      if (bodyStmts.length > 1 && bodyStmts[bodyStmts.length - 1]!.type === 'EndCheckPoint') {
+        forLoopEndCheckPoint = bodyStmts[bodyStmts.length - 1]!;
+      }
+    }
+    
     // 1. Initialization
     let initExitBlock = currentBlock;
     if (forStmt.init) {
-      const initBlock = this.newBlock([forStmt.init]);
+      const initStatements: Statement[] = [];
+      // 如果存在 for 循环作用域的 StartCheckPoint，将其放在 init 之前
+      if (forLoopStartCheckPoint) {
+        initStatements.push(forLoopStartCheckPoint);
+      }
+      initStatements.push(forStmt.init);
+      
+      const initBlock = this.newBlock(initStatements);
       blocks.push(initBlock);
       this.connectBlocks(currentBlock, initBlock);
       initExitBlock = initBlock;
@@ -566,11 +591,29 @@ export class CFGGenerator {
 
     this.loopStack.push({ breakTarget: loopExit, continueTarget: loopUpdate });
 
+    // 处理 body：如果 body 是 BlockStatement 且包含 CheckPoint，需要特殊处理
+    let bodyToProcess = forStmt.body;
+    if (forLoopStartCheckPoint && forLoopEndCheckPoint && 
+        forStmt.body.type === StatementType.BLOCK_STATEMENT) {
+      // 移除 body 中的 StartCheckPoint 和 EndCheckPoint（已经在 initBlock 和 loopExit 中处理）
+      const bodyStmts = (forStmt.body as BlockStatement).statements;
+      const bodyWithoutCheckPoints = bodyStmts.slice(1, -1); // 移除第一个和最后一个
+      bodyToProcess = {
+        ...forStmt.body,
+        statements: bodyWithoutCheckPoints
+      } as BlockStatement;
+    }
+
     const { blocks: bodyBlocks, exit: bodyExit } = this.generateBlockCFG(
-      forStmt.body as BlockStatement,
+      bodyToProcess as BlockStatement,
       loopBodyEntry
     );
     blocks.push(...bodyBlocks);
+    
+    // 在 loopExit 中添加 EndCheckPoint（如果存在）
+    if (forLoopEndCheckPoint) {
+      loopExit.statements.unshift(forLoopEndCheckPoint); // 添加到开始，确保在退出前执行
+    }
 
     // 智能合并逻辑：检查循环体是否总是返回
     if (this.endsWithReturn(bodyExit)) {

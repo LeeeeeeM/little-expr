@@ -90,6 +90,7 @@ export class CheckpointTransformer {
     // 2. 收集当前层的直接变量声明名（按声明顺序）
     //    只收集直接的 VariableDeclaration/LetDeclaration
     //    不包括嵌套 BlockStatement 内的变量
+    //    注意：for 循环的 init 变量会在 transformForStatement 中创建独立作用域，不在这里收集
     const variableNames: string[] = [];
     for (const stmt of processedStatements) {
       if (stmt.type === 'VariableDeclaration' || stmt.type === 'LetDeclaration') {
@@ -147,16 +148,62 @@ export class CheckpointTransformer {
   }
 
   /**
-   * 转换 ForStatement
+   * 转换 ForStatement：为 for 循环创建独立的作用域
    */
   private transformForStatement(
     forStmt: ForStatement,
     currentDepth: number
   ): ForStatement {
-    return {
-      ...forStmt,
-      body: this.transformStatement(forStmt.body, currentDepth)
-    };
+    // 1. 收集 init 中的变量（如果是变量声明）
+    const initVariableNames: string[] = [];
+    if (forStmt.init) {
+      if (forStmt.init.type === 'VariableDeclaration' || forStmt.init.type === 'LetDeclaration') {
+        const varName = (forStmt.init as any).name;
+        if (varName) {
+          initVariableNames.push(varName);
+        }
+      }
+    }
+    
+    // 2. 转换 body
+    const transformedBody = this.transformStatement(forStmt.body, currentDepth + 1);
+    
+    // 3. 如果 init 中有变量声明，创建隐式 BlockStatement 包裹 body，并添加 CheckPoint
+    if (initVariableNames.length > 0) {
+      const scopeId = this.scopeIdGenerator.generate();
+      const forLoopScopeDepth = currentDepth + 1;
+      
+      // 创建包裹 body 的 BlockStatement
+      // 注意：如果 body 已经是 BlockStatement，我们需要将其 statements 提取出来
+      let bodyStatements: Statement[];
+      if (transformedBody.type === 'BlockStatement') {
+        bodyStatements = (transformedBody as BlockStatement).statements;
+      } else {
+        // 如果 body 不是 BlockStatement，需要创建一个
+        bodyStatements = [transformedBody];
+      }
+      
+      // 创建包裹后的 BlockStatement，包含 StartCheckPoint、body 语句、EndCheckPoint
+      const wrappedBody: BlockStatement = {
+        type: 'BlockStatement',
+        statements: [
+          ASTFactory.createStartCheckPoint(scopeId, forLoopScopeDepth, initVariableNames),
+          ...bodyStatements,
+          ASTFactory.createEndCheckPoint(scopeId, forLoopScopeDepth, initVariableNames)
+        ]
+      };
+      
+      return {
+        ...forStmt,
+        body: wrappedBody
+      };
+    } else {
+      // 如果 init 中没有变量声明，直接返回转换后的 body
+      return {
+        ...forStmt,
+        body: transformedBody
+      };
+    }
   }
 }
 

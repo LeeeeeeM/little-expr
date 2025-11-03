@@ -194,6 +194,37 @@ export class CFGGenerator {
     }
   }
 
+  /**
+   * 确保包含 return 语句的块只连接到出口块
+   * 移除所有其他错误的连接
+   */
+  private ensureOnlyExitConnection(block: BasicBlock): void {
+    if (!this.endsWithReturn(block)) {
+      return;
+    }
+    
+    // 如果块以 return 结束，应该只有出口块作为后继
+    const exitBlock = this.currentFunctionExitBlock!;
+    
+    // 移除所有不是出口块的后继连接
+    const wrongSuccessors = block.successors.filter(succ => succ.id !== exitBlock.id);
+    for (const wrongSucc of wrongSuccessors) {
+      // 从前驱列表中移除当前块
+      const predIndex = wrongSucc.predecessors.findIndex(p => p.id === block.id);
+      if (predIndex >= 0) {
+        wrongSucc.predecessors.splice(predIndex, 1);
+      }
+    }
+    
+    // 设置后继为只有出口块
+    block.successors = block.successors.filter(succ => succ.id === exitBlock.id);
+    
+    // 确保连接到出口块
+    if (!block.successors.includes(exitBlock)) {
+      this.connectBlocks(block, exitBlock);
+    }
+  }
+
   private endsWithReturn(block: BasicBlock): boolean {
     // 检查块是否以return语句结束
     if (block.statements.length === 0) {
@@ -280,6 +311,12 @@ export class CFGGenerator {
         continue;
       }
       
+      // 如果当前 exitBlock 以 return 语句结束，不再处理后续语句
+      // 因为 return 后的代码不会执行
+      if (this.endsWithReturn(exitBlock)) {
+        break;
+      }
+      
       if (isControlFlowStatement(stmt)) {
         // 控制流语句：创建新的基本块
         const { blocks: stmtBlocks, entry: stmtEntry, exit: stmtExit } = this.generateStatementCFG(
@@ -292,12 +329,24 @@ export class CFGGenerator {
         // 而不是将后续语句添加到控制流语句的出口块中
         if (stmt.type === StatementType.IF_STATEMENT || stmt.type === StatementType.WHILE_STATEMENT || stmt.type === StatementType.FOR_STATEMENT) {
           // 对于if/while/for语句，后续语句应该在新的基本块中
-          const nextBlock = this.newBlock();
-          blocks.push(nextBlock);
-          this.connectBlocks(stmtExit, nextBlock);
-          exitBlock = nextBlock;
+          // 但是如果 thenExit 或 elseExit 以 return 结束，则不应该创建新的后续块
+            const nextBlock = this.newBlock();
+            blocks.push(nextBlock);
+          // 只有当 stmtExit 不以 return 结束时，才连接后续块
+          if (!this.endsWithReturn(stmtExit)) {
+            this.connectBlocks(stmtExit, nextBlock);
+            exitBlock = nextBlock;
+          } else {
+            // 如果 stmtExit 以 return 结束，不需要连接后续块
+            exitBlock = stmtExit;
+          }
+        } else if (stmt.type === StatementType.RETURN_STATEMENT) {
+          // 对于return语句，直接使用stmtExit（已经连接到出口块）
+          exitBlock = stmtExit;
+          // return 后不再处理后续语句
+          break;
         } else {
-          // 对于return/break/continue语句，直接使用stmtExit
+          // 对于break/continue语句，直接使用stmtExit
           exitBlock = stmtExit;
         }
       } else if (stmt.type === StatementType.BLOCK_STATEMENT) {
@@ -458,24 +507,27 @@ export class CFGGenerator {
 
     if (thenReturns && elseReturns) {
         // 两个分支都返回，不需要合并块
-        // 但是需要创建一个虚拟的合并块来保持死代码的独立性
+        // 确保两个分支都连接到出口块
+        if (!thenExit.successors.includes(this.currentFunctionExitBlock!)) {
+          this.connectBlocks(thenExit, this.currentFunctionExitBlock!);
+        }
+        if (ifStmt.elseBranch && !elseExit.successors.includes(this.currentFunctionExitBlock!)) {
+          this.connectBlocks(elseExit, this.currentFunctionExitBlock!);
+        }
+        // 返回一个虚拟的合并块，但不连接到任何地方
         const mergeBlock = this.newBlock();
         blocks.push(mergeBlock);
-        
-        // 两个分支都连接到合并块（虽然不会执行到）
-        this.connectBlocks(thenExit, mergeBlock);
-        this.connectBlocks(elseExit, mergeBlock);
-        
-        // 合并块不连接到任何地方，保持死代码的独立性
         return { blocks, entry: currentBlock, exit: mergeBlock };
     } else if (thenReturns && !elseReturns) {
         // then分支返回，else分支不返回，else分支继续执行
-        this.connectBlocks(thenExit, this.currentFunctionExitBlock!);
+        // 确保 thenExit 只连接到出口块，移除其他错误的连接
+        this.ensureOnlyExitConnection(thenExit);
         // 确保conditionBlock的后继块顺序正确：then分支在前，else分支在后
         return { blocks, entry: currentBlock, exit: elseExit };
     } else if (!thenReturns && elseReturns) {
         // else分支返回，then分支不返回，then分支继续执行
-        this.connectBlocks(elseExit, this.currentFunctionExitBlock!);
+        // 确保 elseExit 只连接到出口块，移除其他错误的连接
+        this.ensureOnlyExitConnection(elseExit);
         // 确保conditionBlock的后继块顺序正确：then分支在前，else分支在后
         return { blocks, entry: currentBlock, exit: thenExit };
       }

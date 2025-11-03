@@ -6,11 +6,14 @@ interface MenuItem {
   label: string;
 }
 
-interface MenuProps {
-  items: MenuItem[];
-}
+// 统一定义所有菜单项
+const menuItems: MenuItem[] = [
+  { path: '/', label: '首页 - 栈式优先级爬升可视化' },
+  { path: '/ast-cfg', label: 'AST CFG 测试页面' },
+  { path: '/stack-scope', label: '栈布局可视化' },
+];
 
-export const Menu: React.FC<MenuProps> = ({ items }) => {
+export const Menu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -45,7 +48,7 @@ export const Menu: React.FC<MenuProps> = ({ items }) => {
           {/* 菜单列表 */}
           <div className="fixed top-20 left-4 z-50 bg-white rounded-md shadow-xl border border-gray-200 min-w-[200px] overflow-hidden">
             <div className="py-2">
-              {items.map((item) => (
+              {menuItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}

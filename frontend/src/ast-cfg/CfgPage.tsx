@@ -8,11 +8,6 @@ import type { ControlFlowGraph } from './lib/cfg-types';
 import type { Program } from './lib/types';
 import { computeBlockHighlights } from './utils/blockHighlight';
 
-const menuItems = [
-  { path: '/', label: '首页 - 栈式优先级爬升可视化' },
-  { path: '/ast-cfg', label: 'AST CFG 测试页面' },
-];
-
 const PRESET_CODE_SAMPLES = [
   { 
     label: '成绩检查 (grade-check)', 
@@ -267,7 +262,7 @@ const CfgPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <Menu items={menuItems} />
+      <Menu />
       
       {/* 页面标题和操作按钮 */}
       <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 pl-20">

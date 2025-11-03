@@ -53,6 +53,26 @@ export class VMRunner {
         };
       }
 
+      // 输出 CFG 的块和边信息
+      if (compileResult.cfgs && compileResult.cfgs.length > 0) {
+        console.log('\n📊 CFG 详细信息:');
+        for (const cfg of compileResult.cfgs) {
+          console.log(`\n函数: ${cfg.functionName}`);
+          console.log(`总块数: ${cfg.blocks.length}`);
+          console.log(`总边数: ${cfg.edges.length}`);
+          
+          console.log('\n基本块列表:');
+          for (const block of cfg.blocks) {
+            console.log(`  - ${block.id}${block.isEntry ? ' [入口]' : ''}${block.isExit ? ' [出口]' : ''}`);
+          }
+          
+          console.log('\n控制流边:');
+          for (const edge of cfg.edges) {
+            console.log(`  ${edge.from} → ${edge.to}`);
+          }
+        }
+      }
+
       // 3. 运行汇编代码
       console.log('🚀 运行汇编代码...');
       const assemblyResults = compileResult.assemblyResults || [];

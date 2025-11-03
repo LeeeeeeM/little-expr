@@ -3,8 +3,14 @@ import { Header } from './components/Header';
 import { ExpressionEditor } from './components/ExpressionEditor';
 import { StackVisualizer } from './components/StackVisualizer';
 import { AssemblyGenerator } from './components/AssemblyGenerator';
+import { Menu } from '../components/Menu';
 import { type ParseStep } from './parser/types';
 import { parseExpressionWithStackSteps, type StackStep } from './parser/stackBasedParser';
+
+const menuItems = [
+  { path: '/', label: '首页 - 栈式优先级爬升可视化' },
+  { path: '/ast-cfg', label: 'AST CFG 测试页面' },
+];
 
 const App: React.FC = () => {
   const [expression, setExpression] = useState('1+2*3');
@@ -161,6 +167,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      <Menu items={menuItems} />
       <Header
         selectedExpression={expression}
         onExpressionChange={handleExpressionChange}

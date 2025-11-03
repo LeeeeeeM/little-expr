@@ -8,7 +8,7 @@ export class AssemblyGenerator {
   private scopeManager: ScopeManager;
   private lines: string[] = [];
   private declaredVariablesInCurrentBlock: Set<string> = new Set(); // 当前块中已声明的变量
-  
+
   constructor(scopeManager: ScopeManager) {
     this.scopeManager = scopeManager;
   }
@@ -35,7 +35,7 @@ export class AssemblyGenerator {
     const entryBlock = cfg.blocks.find(b => b.isEntry);
     if (entryBlock) {
       this.visitBlock(entryBlock, null);
-    }
+        }
     
     return this.lines.join('\n');
   }
@@ -156,7 +156,7 @@ export class AssemblyGenerator {
     switch (stmt.type) {
       case StatementType.START_CHECK_POINT:
         this.handleStartCheckPoint(stmt as StartCheckPoint);
-        break;
+          break;
       case StatementType.END_CHECK_POINT:
         this.handleEndCheckPoint(stmt as EndCheckPoint);
         break;
@@ -247,7 +247,7 @@ export class AssemblyGenerator {
           if (scope) {
             const vars = Array.from(scope.keys());
             console.warn(`      [${i}]: [${vars.join(', ')}]`);
-          }
+    }
         }
       } else if (matchedScopeIndex !== scopes.length - 1) {
         // 匹配的作用域不在栈顶，这是 DFS 遍历时的正常情况
@@ -283,7 +283,7 @@ export class AssemblyGenerator {
     const offset = this.scopeManager.getVariableOffset(varName);
     if (offset === null) {
       throw new Error(`变量 ${varName} 不在作用域中`);
-    }
+      }
     
     // 生成初始化代码
     if (varDecl.initializer) {
@@ -388,7 +388,7 @@ export class AssemblyGenerator {
         const offset = this.getVariableOffsetForAssignment(varName);
         if (offset !== null) {
           this.lines.push(`  si ${offset}              ; 赋值给 ${varName}`);
-        } else {
+    } else {
           this.lines.push(`  ; 未找到变量 ${varName}`);
         }
         return;
@@ -482,7 +482,7 @@ export class AssemblyGenerator {
       } else if (block.successors.length === 1) {
         // 单一后继：直接跳转
         this.lines.push(`  jmp ${block.successors[0]!.id}`);
-      }
+    }
     }
     this.lines.push('');
   }

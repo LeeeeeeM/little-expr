@@ -82,7 +82,7 @@ export class ScopeManager {
     
     return null;
   }
-
+  
   
   /**
    * 查找变量（兼容旧接口）

@@ -6,6 +6,128 @@ interface AssemblyGeneratorProps {
   currentStep: number;
 }
 
+// 安全的表达式计算器（完全避免 eval 和 Function）
+const safeEvaluateExpression = (expr: string): number | null => {
+  try {
+    // 移除所有空格
+    expr = expr.replace(/\s/g, '');
+    
+    // 验证表达式只包含数字、运算符和括号
+    if (!/^[0-9+\-*/().]+$/.test(expr.replace(/\*\*/g, ''))) {
+      return null;
+    }
+    
+    // 简单的递归下降解析器
+    const tokens: string[] = [];
+    let i = 0;
+    
+    // 词法分析：将表达式转换为 token 列表
+    while (i < expr.length) {
+      if (expr[i] === '*') {
+        if (i + 1 < expr.length && expr[i + 1] === '*') {
+          tokens.push('**');
+          i += 2;
+        } else {
+          tokens.push('*');
+          i++;
+        }
+      } else if (['+', '-', '*', '/', '(', ')'].includes(expr[i])) {
+        tokens.push(expr[i]);
+        i++;
+      } else {
+        // 读取数字
+        let num = '';
+        while (i < expr.length && /[0-9.]/.test(expr[i])) {
+          num += expr[i];
+          i++;
+        }
+        if (num) {
+          tokens.push(num);
+        } else {
+          return null; // 无效字符
+        }
+      }
+    }
+    
+    // 表达式求值（处理运算符优先级）
+    const evaluate = (start: number, end: number): number | null => {
+      // 处理括号
+      if (tokens[start] === '(' && tokens[end - 1] === ')') {
+        // 检查括号是否匹配
+        let depth = 0;
+        let matched = true;
+        for (let j = start; j < end; j++) {
+          if (tokens[j] === '(') depth++;
+          if (tokens[j] === ')') depth--;
+          if (depth === 0 && j < end - 1) {
+            matched = false;
+            break;
+          }
+        }
+        if (matched) {
+          return evaluate(start + 1, end - 1);
+        }
+      }
+      
+      // 处理 **（幂运算，右结合）
+      for (let i = end - 2; i >= start; i--) {
+        if (tokens[i] === '**') {
+          const left = evaluate(start, i);
+          const right = evaluate(i + 1, end);
+          if (left === null || right === null) return null;
+          return Math.pow(left, right);
+        }
+      }
+      
+      // 处理 * 和 /
+      for (let i = start + 1; i < end; i++) {
+        if (tokens[i] === '*') {
+          const left = evaluate(start, i);
+          const right = evaluate(i + 1, end);
+          if (left === null || right === null) return null;
+          return left * right;
+        }
+        if (tokens[i] === '/') {
+          const left = evaluate(start, i);
+          const right = evaluate(i + 1, end);
+          if (left === null || right === null) return null;
+          if (right === 0) return null; // 除零
+          return left / right;
+        }
+      }
+      
+      // 处理 + 和 -
+      for (let i = start + 1; i < end; i++) {
+        if (tokens[i] === '+') {
+          const left = evaluate(start, i);
+          const right = evaluate(i + 1, end);
+          if (left === null || right === null) return null;
+          return left + right;
+        }
+        if (tokens[i] === '-') {
+          const left = evaluate(start, i);
+          const right = evaluate(i + 1, end);
+          if (left === null || right === null) return null;
+          return left - right;
+        }
+      }
+      
+      // 单个数字
+      if (start === end - 1) {
+        const num = parseFloat(tokens[start]);
+        return isNaN(num) ? null : num;
+      }
+      
+      return null;
+    };
+    
+    const result = evaluate(0, tokens.length);
+    return result !== null && isFinite(result) ? result : null;
+  } catch (e) {
+    return null;
+  }
+};
+
 // 生成完整的汇编指令（不包含步骤和结果信息）
 const generateCompleteAssembly = (steps: StackStep[]): string => {
   const instructions: string[] = [];
@@ -202,9 +324,9 @@ const generateAssemblyInstruction = (step: StackStep): string | null => {
     // 如果最终结果是表达式，尝试计算数值
     if (finalResult.includes('(') && finalResult.includes(')')) {
       try {
-        // 简单的表达式计算（仅支持基本运算）
-        const evalResult = eval(finalResult.replace(/\*\*/g, '**'));
-        if (typeof evalResult === 'number') {
+        // 安全的表达式计算（仅支持基本运算）
+        const evalResult = safeEvaluateExpression(finalResult);
+        if (evalResult !== null) {
           finalResult = evalResult.toString();
         }
       } catch (e) {

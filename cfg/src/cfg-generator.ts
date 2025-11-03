@@ -1001,17 +1001,16 @@ export class CFGVisualizer {
       case StatementType.BLOCK_STATEMENT:
         const blockStmt = stmt as BlockStatement;
         if (blockStmt.statements.length === 0) {
-          return `代码块 { }`;
+          return ``;
         }
-        let content = '代码块 \n{\n';
-        for (const innerStmt of blockStmt.statements) {
-          if (innerStmt.type === StatementType.EMPTY_STATEMENT) continue;
-          content += `    - ${this.statementToDisplayString(innerStmt)}\n`;
-        }
-        content += '}';
-        return content;
+        const nonEmptyStatements = blockStmt.statements.filter(s => s.type !== StatementType.EMPTY_STATEMENT);
+        return nonEmptyStatements.map(s => this.statementToDisplayString(s)).join('\n');
       case StatementType.EMPTY_STATEMENT:
         return `空语句`;
+      case StatementType.START_CHECK_POINT:
+        return `start checkpoint  {`;
+      case StatementType.END_CHECK_POINT:
+        return `}  end checkpoint`;
       default:
         return `未知语句类型: ${stmt.type}`;
     }

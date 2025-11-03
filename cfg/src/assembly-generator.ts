@@ -176,8 +176,13 @@ export class AssemblyGenerator {
         this.generateReturn(stmt as any);
         break;
       case StatementType.BLOCK_STATEMENT:
-        // BlockStatement 内的语句应该已经被展开到基本块中了
-        // 这里理论上不应该遇到
+        // BlockStatement 内的语句需要递归处理
+        const blockStmt = stmt as any;
+        if (blockStmt.statements) {
+          for (const innerStmt of blockStmt.statements) {
+            this.generateStatement(innerStmt);
+          }
+        }
         break;
       default:
         break;

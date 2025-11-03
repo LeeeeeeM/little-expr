@@ -332,7 +332,11 @@ const CfgPage: React.FC = () => {
             {/* Tab 导航 */}
             <div className="flex border-b border-gray-200 flex-shrink-0">
               <button
-                onClick={() => setActiveTab('cfg')}
+                onClick={() => {
+                  setActiveTab('cfg');
+                  // 切换到 CFG 时清除选中状态，恢复所有块的颜色
+                  setSelectedBlockId(null);
+                }}
                 className={`px-6 py-3 text-sm font-medium transition-colors ${
                   activeTab === 'cfg'
                     ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
@@ -342,7 +346,11 @@ const CfgPage: React.FC = () => {
                 CFG
               </button>
               <button
-                onClick={() => setActiveTab('ast')}
+                onClick={() => {
+                  setActiveTab('ast');
+                  // 切换到 AST 时清除选中状态，恢复所有块的颜色
+                  setSelectedBlockId(null);
+                }}
                 className={`px-6 py-3 text-sm font-medium transition-colors ${
                   activeTab === 'ast'
                     ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'

@@ -55,6 +55,8 @@ export const CodeEditorWithBlockHighlight: React.FC<CodeEditorWithBlockHighlight
 
     const lineCount = model.getLineCount();
 
+    // 始终应用所有块的 decoration，因为同一行可能被多个块覆盖
+    // 实际的背景色显示由 CSS 控制（选中时其他块透明，未选中时显示所有块的颜色）
     for (const highlight of highlights) {
       // Monaco Editor 的行号从 1 开始
       const startLine = Math.max(1, Math.min(highlight.startLine, lineCount));
@@ -104,9 +106,12 @@ export const CodeEditorWithBlockHighlight: React.FC<CodeEditorWithBlockHighlight
     );
   };
 
-  // 当 blockHighlights 改变时更新装饰
+  // 当 blockHighlights 或 selectedBlockId 改变时更新装饰
+  // 注意：即使有选中块，我们也需要应用所有块的 decoration，因为同一行可能被多个块覆盖
+  // 实际的显示由 CSS 控制（选中时其他块透明，未选中时显示所有块的颜色）
   useEffect(() => {
     if (editorRef.current && monacoRef.current) {
+      // 始终应用所有块的 decoration，显示由 CSS 控制
       updateDecorations(editorRef.current, monacoRef.current, blockHighlights, selectedBlockId);
     }
   }, [blockHighlights, selectedBlockId]);
@@ -143,56 +148,101 @@ export const CodeEditorWithBlockHighlight: React.FC<CodeEditorWithBlockHighlight
 
     // 为每个块生成 CSS 规则
            let css = '';
-           for (const highlight of blockHighlights) {
-             const safeClassName = `cfg-block-highlight-${highlight.blockId.replace(/[^a-zA-Z0-9]/g, '-')}`;
-             const isSelected = selectedBlockId === highlight.blockId;
-             const backgroundColor = isSelected ? '#000000' : highlight.color; // 选中时使用黑色背景
-             const textColor = isSelected ? '#ffffff' : 'inherit'; // 选中时使用白色文字
+           
+           // 如果有选中的块，需要清除所有其他块的背景色
+           if (selectedBlockId) {
+             // 只保留选中块的样式
+             const selectedHighlight = blockHighlights.find(h => h.blockId === selectedBlockId);
+             if (selectedHighlight) {
+               const safeClassName = `cfg-block-highlight-${selectedHighlight.blockId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+               const backgroundColor = '#000000';
+               const textColor = '#ffffff';
+               
+               css += `
+                 .monaco-editor .view-overlays .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .view-line .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .view-zones .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .current-line .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .${safeClassName}-selected {
+                   color: ${textColor} !important;
+                 }
+                 .monaco-editor .view-line .${safeClassName}-selected {
+                   color: ${textColor} !important;
+                 }
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk1,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk2,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk3,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk4,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk5,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk6,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk7,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk8,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk9,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk10,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk11,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk12,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk13,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk14,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk15,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk16,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk17,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk18,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk19,
+                 .monaco-editor .view-line .${safeClassName}-selected .mtk20 {
+                   color: ${textColor} !important;
+                 }
+               `;
+             }
              
-             css += `
-               .monaco-editor .view-overlays .${safeClassName} {
-                 background-color: ${backgroundColor} !important;
+             // 清除所有其他块的背景色
+             for (const highlight of blockHighlights) {
+               if (highlight.blockId !== selectedBlockId) {
+                 const safeClassName = `cfg-block-highlight-${highlight.blockId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                 css += `
+                   .monaco-editor .view-overlays .${safeClassName} {
+                     background-color: transparent !important;
+                   }
+                   .monaco-editor .view-line .${safeClassName} {
+                     background-color: transparent !important;
+                   }
+                   .monaco-editor .view-zones .${safeClassName} {
+                     background-color: transparent !important;
+                   }
+                   .monaco-editor .current-line .${safeClassName} {
+                     background-color: transparent !important;
+                   }
+                 `;
                }
-               .monaco-editor .view-line .${safeClassName} {
-                 background-color: ${backgroundColor} !important;
-               }
-               .monaco-editor .view-zones .${safeClassName} {
-                 background-color: ${backgroundColor} !important;
-               }
-               .monaco-editor .current-line .${safeClassName} {
-                 background-color: ${backgroundColor} !important;
-               }
-               ${isSelected ? `
-               .monaco-editor .${safeClassName}-selected {
-                 color: ${textColor} !important;
-               }
-               .monaco-editor .view-line .${safeClassName}-selected {
-                 color: ${textColor} !important;
-               }
-               .monaco-editor .view-line .${safeClassName}-selected .mtk1,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk2,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk3,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk4,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk5,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk6,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk7,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk8,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk9,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk10,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk11,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk12,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk13,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk14,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk15,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk16,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk17,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk18,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk19,
-               .monaco-editor .view-line .${safeClassName}-selected .mtk20 {
-                 color: ${textColor} !important;
-               }
-               ` : ''}
-             `;
+             }
+           } else {
+             // 没有选中块时，显示所有块的颜色
+             for (const highlight of blockHighlights) {
+               const safeClassName = `cfg-block-highlight-${highlight.blockId.replace(/[^a-zA-Z0-9]/g, '-')}`;
+               const backgroundColor = highlight.color;
+               
+               css += `
+                 .monaco-editor .view-overlays .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .view-line .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .view-zones .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+                 .monaco-editor .current-line .${safeClassName} {
+                   background-color: ${backgroundColor} !important;
+                 }
+               `;
+             }
            }
 
            styleElement.textContent = css;

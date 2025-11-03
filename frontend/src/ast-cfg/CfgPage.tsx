@@ -2,8 +2,10 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { Menu } from '../components/Menu';
 import { CodeEditorWithBlockHighlight } from './components/CodeEditorWithBlockHighlight';
 import { CfgVisualizer } from './components/CfgVisualizer';
+import { AstVisualizer } from './components/AstVisualizer';
 import { Compiler } from './lib/compiler';
 import type { ControlFlowGraph } from './lib/cfg-types';
+import type { Program } from './lib/types';
 import { computeBlockHighlights } from './utils/blockHighlight';
 
 const menuItems = [
@@ -187,13 +189,19 @@ const CfgPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | undefined>();
   const [isRunning, setIsRunning] = useState(false);
   const [cfg, setCfg] = useState<ControlFlowGraph | null>(null);
+  const [ast, setAst] = useState<Program | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'cfg' | 'ast'>('cfg');
 
   const handleCodeChange = useCallback((newCode: string) => {
     setCode(newCode);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
     setIsValid(true);
+    // 切换代码时清除之前的高亮和选中状态
+    setCfg(null);
+    setAst(null);
+    setSelectedBlockId(null);
   }, []);
 
   const handleCompile = useCallback(async () => {
@@ -203,9 +211,10 @@ const CfgPage: React.FC = () => {
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
     setCfg(null);
+    setAst(null);
     
     try {
-      // 编译生成 CFG
+      // 编译生成 CFG 和 AST
       const compiler = new Compiler();
       const compileResult = compiler.compile(code);
       
@@ -217,13 +226,16 @@ const CfgPage: React.FC = () => {
         return;
       }
       
+      // 设置 AST（原始 AST，用于可视化）
+      setAst(compileResult.ast);
+      
       // 获取第一个函数的 CFG
       if (compileResult.cfgs && compileResult.cfgs.length > 0) {
         setCfg(compileResult.cfgs[0]);
         setSelectedBlockId(null); // 编译新代码时清除选中状态
         setIsRunning(false);
         setSuccessMessage(`编译成功！生成了 ${compileResult.cfgs.length} 个函数的 CFG`);
-    setIsValid(true);
+        setIsValid(true);
       } else {
         setIsRunning(false);
         setErrorMessage('未找到函数定义');
@@ -240,6 +252,7 @@ const CfgPage: React.FC = () => {
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
     setCfg(null);
+    setAst(null);
     setSelectedBlockId(null);
   }, []);
 
@@ -315,8 +328,39 @@ const CfgPage: React.FC = () => {
         
         {/* 右侧展示区域 - 70% */}
         <div className="w-[70%] p-6">
-          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200">
-            <CfgVisualizer cfg={cfg} onBlockSelect={handleBlockSelect} />
+          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col">
+            {/* Tab 导航 */}
+            <div className="flex border-b border-gray-200 flex-shrink-0">
+              <button
+                onClick={() => setActiveTab('cfg')}
+                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'cfg'
+                    ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                CFG
+              </button>
+              <button
+                onClick={() => setActiveTab('ast')}
+                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'ast'
+                    ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                AST
+              </button>
+            </div>
+            
+            {/* Tab 内容 */}
+            <div className="flex-1 min-h-0">
+              {activeTab === 'cfg' ? (
+                <CfgVisualizer cfg={cfg} onBlockSelect={handleBlockSelect} />
+              ) : (
+                <AstVisualizer ast={ast} />
+              )}
+            </div>
           </div>
         </div>
       </main>

@@ -1444,8 +1444,8 @@ const CodegenVmPage: React.FC = () => {
       </header>
       
       <main className="flex flex-1 min-h-0 overflow-hidden">
-        {/* 左侧代码编辑器 - 25% */}
-        <div className="w-[25%] p-6 border-r border-gray-200 flex-shrink-0 overflow-hidden flex flex-col">
+        {/* 左侧代码编辑器 - 20% */}
+        <div className="w-[20%] px-3 py-6 border-r border-gray-200 flex-shrink-0 overflow-hidden flex flex-col">
           {/* 编辑器标题头 */}
           <div className="flex items-center justify-between mb-4 flex-shrink-0">
             <h2 className="text-lg font-semibold text-gray-900">源代码编辑器</h2>
@@ -1471,6 +1471,7 @@ const CodegenVmPage: React.FC = () => {
                 fontSize: 14,
                 wordWrap: 'on',
                 scrollBeyondLastLine: false,
+                lineNumbersMinChars: 3,
               }}
             />
           </div>
@@ -1492,7 +1493,7 @@ const CodegenVmPage: React.FC = () => {
         </div>
         
         {/* 中间 CFG 展示区域 - 40% */}
-        <div className="w-[40%] p-6 border-r border-gray-200 flex-shrink-0 overflow-hidden">
+        <div className="w-[40%] px-3 py-6 border-r border-gray-200 flex-shrink-0 overflow-hidden">
           <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <CfgVisualizer
               cfg={cfg}
@@ -1502,8 +1503,8 @@ const CodegenVmPage: React.FC = () => {
           </div>
         </div>
         
-        {/* 右侧栈结构展示 - 15% */}
-        <div className="w-[15%] p-6 border-r border-gray-200 flex-shrink-0 overflow-hidden">
+        {/* 右侧栈结构展示 - 20% */}
+        <div className="w-[20%] px-3 py-6 border-r border-gray-200 flex-shrink-0 overflow-hidden">
           <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <StackVisualizer
                 stackFrames={stackFrames}
@@ -1515,7 +1516,7 @@ const CodegenVmPage: React.FC = () => {
         </div>
         
         {/* 最右侧汇编代码展示 - 20% */}
-        <div className="w-[20%] p-6 flex-shrink-0 overflow-hidden">
+        <div className="w-[20%] px-3 py-6 flex-shrink-0 overflow-hidden">
           <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <AssemblyVisualizer
               assemblyLines={assemblyLines}

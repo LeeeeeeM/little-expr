@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 interface MenuItem {
   path: string;
@@ -11,10 +11,22 @@ const menuItems: MenuItem[] = [
   { path: '/', label: '首页 - 栈式优先级爬升可视化' },
   { path: '/ast-cfg', label: 'AST CFG 测试页面' },
   { path: '/stack-scope', label: '栈布局可视化' },
+  { path: '/codegen-vm', label: '代码生成与虚拟机' },
 ];
 
 export const Menu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+
+  // 根据当前路径更新 document.title
+  useEffect(() => {
+    const currentItem = menuItems.find(item => item.path === location.pathname);
+    if (currentItem) {
+      document.title = currentItem.label;
+    } else {
+      document.title = 'BNF 编译器工具';
+    }
+  }, [location.pathname]);
 
   return (
     <div className="relative">

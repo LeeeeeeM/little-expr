@@ -5,6 +5,7 @@ import './index.css'
 import App from './priority-climbing/App.tsx'
 import CfgPage from './ast-cfg/CfgPage.tsx'
 import StackScopePage from './stack-scope/StackScopePage.tsx'
+import CodegenVmPage from './codegen-vm/CodegenVmPage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,6 +14,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<App />} />
         <Route path="/ast-cfg" element={<CfgPage />} />
         <Route path="/stack-scope" element={<StackScopePage />} />
+        <Route path="/codegen-vm" element={<CodegenVmPage />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

@@ -483,6 +483,10 @@ const StackScopePage: React.FC = () => {
       const stmtType = nextStmt.type as string;
       if (stmtType === 'VariableDeclaration' || stmtType === 'LetDeclaration') {
         variableName = nextStmt.name || null;
+        // 标记变量为已初始化
+        if (variableName) {
+          scopeManager.markVariableInitialized(variableName);
+        }
       } else if (stmtType === 'AssignmentStatement') {
         variableName = nextStmt.target?.name || null;
       } else if (stmtType === 'ReturnStatement') {
@@ -539,20 +543,30 @@ const StackScopePage: React.FC = () => {
       // 标记当前块为已访问
       const newVisited = new Set(visitedBlocks);
       newVisited.add(currentBlock.id);
+      console.log(`[执行完毕] 块 ${currentBlock.id} 执行完毕，标记为已访问`);
+      console.log(`[当前已访问]`, Array.from(newVisited));
       setVisitedBlocks(newVisited);
       
       // 将当前块的所有未访问的后继块加入待处理队列（深拷贝快照）
+      // 注意：应该使用 newVisited（包含当前块的最新状态），而不是旧的 visitedBlocks state
       const newPendingSuccessors: Array<{block: BasicBlock, snapshot: ScopeInfo[]}> = [];
+      console.log(`[收集后继] 块 ${currentBlock.id} 的后继块:`, currentBlock.successors.map(s => s.id));
       for (const successor of currentBlock.successors) {
-        if (!newVisited.has(successor.id)) {
+        const isVisited = newVisited.has(successor.id);
+        console.log(`[检查后继] 后继块 ${successor.id} 是否已访问: ${isVisited}`);
+        if (!isVisited) {
           // 深拷贝快照（ScopeInfo[] 已经是对象数组，需要深拷贝）
           const snapshotCopy: ScopeInfo[] = currentSnapshot.map(scope => ({
             scopeId: scope.scopeId,
             variables: scope.variables.map(v => ({ ...v }))
           }));
           newPendingSuccessors.push({ block: successor, snapshot: snapshotCopy });
+          console.log(`[加入队列] 后继块 ${successor.id} 加入待处理队列`);
+        } else {
+          console.log(`[跳过] 后继块 ${successor.id} 已访问，跳过`);
         }
       }
+      console.log(`[队列结果] 待处理后继块:`, newPendingSuccessors.map(s => s.block.id));
       
       // 从队列中取出下一个块
       if (newPendingSuccessors.length > 0) {
@@ -577,22 +591,243 @@ const StackScopePage: React.FC = () => {
         }
         
         // 检查该块是否已经访问过（可能在其他路径中已访问）
-        const savedSnapshot = blockSnapshots.get(nextBlock.id);
-        if (savedSnapshot) {
-          // 已访问过，恢复该块进入时的快照（类似 assembly-generator 的逻辑）
-          scopeManager.restoreSnapshot(savedSnapshot);
-        } else {
-          // 首次访问，恢复传入的快照（父块退出时的快照），并保存为进入快照
-          scopeManager.restoreSnapshot(nextSnapshot);
-          const newSnapshots = new Map(blockSnapshots);
-          // 深拷贝保存进入时的快照
-          const enteringSnapshot = scopeManager.getSnapshot();
-          newSnapshots.set(nextBlock.id, enteringSnapshot.map(scope => ({
-            scopeId: scope.scopeId,
-            variables: scope.variables.map(v => ({ ...v }))
-          })));
-          setBlockSnapshots(newSnapshots);
+        // 如果已访问过，跳过该块，直接处理下一个后继块（类似 assembly-generator 的逻辑）
+        // 注意：使用 newVisited 而不是 visitedBlocks，因为 newVisited 包含当前块的最新状态
+        console.log(`[准备进入] 准备进入块 ${nextBlock.id}，检查是否已访问: ${newVisited.has(nextBlock.id)}`);
+        if (newVisited.has(nextBlock.id)) {
+          // 已访问过，跳过该块，继续处理下一个后继块
+          console.log(`[跳过块] 块 ${nextBlock.id} 已访问过，跳过`);
+          // 如果有剩余的后继块，继续处理
+          if (remainingSuccessors.length > 0) {
+            const nextItem = remainingSuccessors[0]!;
+            const nextRemainingSuccessors = remainingSuccessors.slice(1);
+            const nextNextBlock = nextItem.block;
+            const nextNextSnapshot = nextItem.snapshot;
+            
+            // 如果还有剩余的后继块，更新 DFS 栈
+            if (nextRemainingSuccessors.length > 0) {
+              const currentDfsStack = [...dfsStack];
+              currentDfsStack.push({
+                parentSnapshot: currentSnapshot.map(scope => ({
+                  scopeId: scope.scopeId,
+                  variables: scope.variables.map(v => ({ ...v }))
+                })),
+                pendingSuccessors: nextRemainingSuccessors
+              });
+              setDfsStack(currentDfsStack);
+            }
+            
+            // 递归处理下一个块
+            const savedSnapshot = blockSnapshots.get(nextNextBlock.id);
+            if (savedSnapshot) {
+              scopeManager.restoreSnapshot(savedSnapshot);
+            } else {
+              scopeManager.restoreSnapshot(nextNextSnapshot);
+              const newSnapshots = new Map(blockSnapshots);
+              const enteringSnapshot = scopeManager.getSnapshot();
+              newSnapshots.set(nextNextBlock.id, enteringSnapshot.map(scope => ({
+                scopeId: scope.scopeId,
+                variables: scope.variables.map(v => ({ ...v }))
+              })));
+              setBlockSnapshots(newSnapshots);
+            }
+            
+            setCurrentBlock(nextNextBlock);
+            setCurrentStepIndex(0);
+            setActiveBlockId(nextNextBlock.id);
+            setCurrentBlockId(nextNextBlock.id);
+            setPendingSuccessors([]);
+            setHighlightedVariable(null);
+            
+            const blockSteps: StackStep[] = [];
+            blockSteps.push({
+              stepIndex: 0,
+              statement: `进入块 ${nextNextBlock.id}`,
+              scopeStack: scopeManager.getSnapshot()
+            });
+            
+            setStackFrames([{
+              blockId: nextNextBlock.id,
+              steps: blockSteps
+            }]);
+            
+            setScopeManager(scopeManager);
+          } else {
+            // 没有剩余的后继块，需要回溯
+            // 注意：这里使用 newVisited 而不是 visitedBlocks，因为 newVisited 包含当前块的最新状态
+            if (dfsStack.length > 0) {
+              const parentContext = dfsStack[dfsStack.length - 1]!;
+              const newDfsStack = dfsStack.slice(0, -1);
+              
+              scopeManager.restoreSnapshot(parentContext.parentSnapshot);
+              setScopeManager(scopeManager);
+              
+              if (parentContext.pendingSuccessors.length > 0) {
+                const nextItem = parentContext.pendingSuccessors[0]!;
+                const remainingSuccessors2 = parentContext.pendingSuccessors.slice(1);
+                const nextBlock2 = nextItem.block;
+                const nextSnapshot2 = nextItem.snapshot;
+                
+                // 检查该块是否已经访问过（可能在回溯过程中已被访问）
+                // 注意：使用 newVisited 而不是 visitedBlocks，因为 newVisited 包含当前块的最新状态
+                console.log(`[回溯检查] 从 DFS 栈弹出块 ${nextBlock2.id}，检查是否已访问: ${newVisited.has(nextBlock2.id)}`);
+                if (newVisited.has(nextBlock2.id)) {
+                  // 已访问过，跳过该块，继续处理下一个后继块
+                  console.log(`[回溯跳过] 从 DFS 栈弹出的块 ${nextBlock2.id} 已访问过，跳过`);
+                  if (remainingSuccessors2.length > 0) {
+                    const nextItem3 = remainingSuccessors2[0]!;
+                    const remainingSuccessors3 = remainingSuccessors2.slice(1);
+                    const nextBlock3 = nextItem3.block;
+                    const nextSnapshot3 = nextItem3.snapshot;
+                    
+                    if (remainingSuccessors3.length > 0) {
+                      const currentDfsStack3 = [...newDfsStack];
+                      currentDfsStack3.push({
+                        parentSnapshot: parentContext.parentSnapshot,
+                        pendingSuccessors: remainingSuccessors3
+                      });
+                      setDfsStack(currentDfsStack3);
+                    } else {
+                      setDfsStack(newDfsStack);
+                    }
+                    
+                    const savedSnapshot3 = blockSnapshots.get(nextBlock3.id);
+                    if (savedSnapshot3) {
+                      scopeManager.restoreSnapshot(savedSnapshot3);
+                    } else {
+                      scopeManager.restoreSnapshot(nextSnapshot3);
+                      const newSnapshots3 = new Map(blockSnapshots);
+                      const enteringSnapshot3 = scopeManager.getSnapshot();
+                      newSnapshots3.set(nextBlock3.id, enteringSnapshot3.map(scope => ({
+                        scopeId: scope.scopeId,
+                        variables: scope.variables.map(v => ({ ...v }))
+                      })));
+                      setBlockSnapshots(newSnapshots3);
+                    }
+                    
+                    setCurrentBlock(nextBlock3);
+                    setCurrentStepIndex(0);
+                    setActiveBlockId(nextBlock3.id);
+                    setCurrentBlockId(nextBlock3.id);
+                    setPendingSuccessors([]);
+                    setHighlightedVariable(null);
+                    
+                    const blockSteps3: StackStep[] = [];
+                    blockSteps3.push({
+                      stepIndex: 0,
+                      statement: `进入块 ${nextBlock3.id}`,
+                      scopeStack: scopeManager.getSnapshot()
+                    });
+                    
+                    setStackFrames([{
+                      blockId: nextBlock3.id,
+                      steps: blockSteps3
+                    }]);
+                    
+                    setScopeManager(scopeManager);
+                  } else {
+                    // 没有剩余的后继块，继续回溯
+                    setDfsStack(newDfsStack);
+                    if (newDfsStack.length === 0) {
+                      setSuccessMessage('所有基本块已执行完毕！');
+                      setIsStepping(false);
+                      setIsTraversalCompleted(true);
+                      setIsAutoExecuting(false);
+                      if (autoExecuteIntervalRef.current) {
+                        clearInterval(autoExecuteIntervalRef.current);
+                        autoExecuteIntervalRef.current = null;
+                      }
+                    }
+                  }
+                } else {
+                  // 未访问过，正常处理
+                  console.log(`[回溯进入] 从 DFS 栈进入块 ${nextBlock2.id}（未访问过）`);
+                  const savedSnapshot2 = blockSnapshots.get(nextBlock2.id);
+                  if (savedSnapshot2) {
+                    scopeManager.restoreSnapshot(savedSnapshot2);
+                  } else {
+                    scopeManager.restoreSnapshot(nextSnapshot2);
+                    const newSnapshots2 = new Map(blockSnapshots);
+                    const enteringSnapshot2 = scopeManager.getSnapshot();
+                    newSnapshots2.set(nextBlock2.id, enteringSnapshot2.map(scope => ({
+                      scopeId: scope.scopeId,
+                      variables: scope.variables.map(v => ({ ...v }))
+                    })));
+                    setBlockSnapshots(newSnapshots2);
+                  }
+                  
+                  if (remainingSuccessors2.length > 0) {
+                    const currentDfsStack2 = [...newDfsStack];
+                    currentDfsStack2.push({
+                      parentSnapshot: parentContext.parentSnapshot,
+                      pendingSuccessors: remainingSuccessors2
+                    });
+                    setDfsStack(currentDfsStack2);
+                  } else {
+                    setDfsStack(newDfsStack);
+                  }
+                  
+                  setCurrentBlock(nextBlock2);
+                  setCurrentStepIndex(0);
+                  setActiveBlockId(nextBlock2.id);
+                  setCurrentBlockId(nextBlock2.id);
+                  setPendingSuccessors([]);
+                  setHighlightedVariable(null);
+                  
+                  const blockSteps2: StackStep[] = [];
+                  blockSteps2.push({
+                    stepIndex: 0,
+                    statement: `进入块 ${nextBlock2.id}`,
+                    scopeStack: scopeManager.getSnapshot()
+                  });
+                  
+                  setStackFrames([{
+                    blockId: nextBlock2.id,
+                    steps: blockSteps2
+                  }]);
+                  
+                  setScopeManager(scopeManager);
+                }
+              } else {
+                setDfsStack(newDfsStack);
+                // 继续回溯
+                if (newDfsStack.length === 0) {
+                  setSuccessMessage('所有基本块已执行完毕！');
+                  setIsStepping(false);
+                  setIsTraversalCompleted(true);
+                  setIsAutoExecuting(false);
+                  if (autoExecuteIntervalRef.current) {
+                    clearInterval(autoExecuteIntervalRef.current);
+                    autoExecuteIntervalRef.current = null;
+                  }
+                }
+              }
+            } else {
+              // DFS 栈为空，所有块都执行完毕
+              setSuccessMessage('所有基本块已执行完毕！');
+              setIsStepping(false);
+              setIsTraversalCompleted(true);
+              setIsAutoExecuting(false);
+              if (autoExecuteIntervalRef.current) {
+                clearInterval(autoExecuteIntervalRef.current);
+                autoExecuteIntervalRef.current = null;
+              }
+            }
+          }
+          return;
         }
+        
+        // 首次访问该块，恢复传入的快照（父块退出时的快照），并保存为进入快照
+        console.log(`[进入新块] 首次访问块 ${nextBlock.id}`);
+        scopeManager.restoreSnapshot(nextSnapshot);
+        const newSnapshots = new Map(blockSnapshots);
+        // 深拷贝保存进入时的快照
+        const enteringSnapshot = scopeManager.getSnapshot();
+        newSnapshots.set(nextBlock.id, enteringSnapshot.map(scope => ({
+          scopeId: scope.scopeId,
+          variables: scope.variables.map(v => ({ ...v }))
+        })));
+        setBlockSnapshots(newSnapshots);
         
         // 设置新的当前块（清空当前层的 pendingSuccessors，因为已经压栈）
         setCurrentBlock(nextBlock);
@@ -625,6 +860,17 @@ const StackScopePage: React.FC = () => {
       } else {
         // 当前块没有后继块，需要回溯
         // 从 DFS 栈中弹出上一层信息
+        // 注意：这里需要使用已访问的块集合，应该使用包含当前块的最新状态
+        // 但由于 currentBlock 没有后继块，说明它可能是 exit block 或者已经执行完毕
+        // 如果 currentBlock 已经执行完毕，它应该在 visitedBlocks 中
+        // 但为了确保使用最新状态，我们需要创建一个包含当前块的已访问集合
+        const currentVisited = new Set(visitedBlocks);
+        // 如果 currentBlock 存在且不在 visitedBlocks 中，说明它刚执行完毕但还没更新 state
+        // 这种情况下，我们应该将它加入 currentVisited
+        if (currentBlock && !currentVisited.has(currentBlock.id)) {
+          currentVisited.add(currentBlock.id);
+        }
+        
         if (dfsStack.length > 0) {
           const parentContext = dfsStack[dfsStack.length - 1]!;
           const newDfsStack = dfsStack.slice(0, -1);
@@ -640,20 +886,207 @@ const StackScopePage: React.FC = () => {
             const nextBlock = nextItem.block;
             const nextSnapshot = nextItem.snapshot;
             
-            // 检查该块是否已经访问过
-            const savedSnapshot = blockSnapshots.get(nextBlock.id);
-            if (savedSnapshot) {
-              scopeManager.restoreSnapshot(savedSnapshot);
-            } else {
-              scopeManager.restoreSnapshot(nextSnapshot);
-              const newSnapshots = new Map(blockSnapshots);
-              const enteringSnapshot = scopeManager.getSnapshot();
-              newSnapshots.set(nextBlock.id, enteringSnapshot.map(scope => ({
-                scopeId: scope.scopeId,
-                variables: scope.variables.map(v => ({ ...v }))
-              })));
-              setBlockSnapshots(newSnapshots);
+            // 检查该块是否已经访问过（已执行完毕）
+            // 如果已访问过，跳过该块，继续处理下一个后继块
+            // 注意：使用 currentVisited 而不是 visitedBlocks，确保包含当前块的最新状态
+            console.log(`[回溯检查2] 检查块 ${nextBlock.id} 是否已访问: ${currentVisited.has(nextBlock.id)}`);
+            if (currentVisited.has(nextBlock.id)) {
+              // 已访问过，跳过该块，继续处理下一个后继块
+              console.log(`[回溯跳过2] 块 ${nextBlock.id} 已访问过，跳过`);
+              if (remainingSuccessors.length > 0) {
+                const nextItem2 = remainingSuccessors[0]!;
+                const remainingSuccessors2 = remainingSuccessors.slice(1);
+                const nextBlock2 = nextItem2.block;
+                const nextSnapshot2 = nextItem2.snapshot;
+                
+                if (remainingSuccessors2.length > 0) {
+                  newDfsStack.push({
+                    parentSnapshot: parentContext.parentSnapshot,
+                    pendingSuccessors: remainingSuccessors2
+                  });
+                }
+                setDfsStack(newDfsStack);
+                
+                const savedSnapshot2 = blockSnapshots.get(nextBlock2.id);
+                if (savedSnapshot2) {
+                  scopeManager.restoreSnapshot(savedSnapshot2);
+                } else {
+                  scopeManager.restoreSnapshot(nextSnapshot2);
+                  const newSnapshots2 = new Map(blockSnapshots);
+                  const enteringSnapshot2 = scopeManager.getSnapshot();
+                  newSnapshots2.set(nextBlock2.id, enteringSnapshot2.map(scope => ({
+                    scopeId: scope.scopeId,
+                    variables: scope.variables.map(v => ({ ...v }))
+                  })));
+                  setBlockSnapshots(newSnapshots2);
+                }
+                
+                setCurrentBlock(nextBlock2);
+                setCurrentStepIndex(0);
+                setActiveBlockId(nextBlock2.id);
+                setCurrentBlockId(nextBlock2.id);
+                setPendingSuccessors([]);
+                setHighlightedVariable(null);
+                
+                const blockSteps2: StackStep[] = [];
+                blockSteps2.push({
+                  stepIndex: 0,
+                  statement: `进入块 ${nextBlock2.id}`,
+                  scopeStack: scopeManager.getSnapshot()
+                });
+                
+                setStackFrames([{
+                  blockId: nextBlock2.id,
+                  steps: blockSteps2
+                }]);
+                
+                setScopeManager(scopeManager);
+                return;
+              } else {
+                // 没有剩余的后继块，继续回溯
+                // 注意：这里需要继续回溯到更上层，而不是直接 return
+                // 因为如果直接 return，下次调用时 currentBlock 仍然是已完成的块，会再次进入"块执行完毕"逻辑
+                setDfsStack(newDfsStack);
+                
+                if (newDfsStack.length === 0) {
+                  // DFS 栈为空，所有块都执行完毕
+                  setSuccessMessage('所有基本块已执行完毕！');
+                  setIsStepping(false);
+                  setIsTraversalCompleted(true);
+                  setIsAutoExecuting(false);
+                  if (autoExecuteIntervalRef.current) {
+                    clearInterval(autoExecuteIntervalRef.current);
+                    autoExecuteIntervalRef.current = null;
+                  }
+                  // 清空当前块，避免重复执行
+                  setCurrentBlock(null);
+                  setCurrentStepIndex(-1);
+                  setCurrentBlockId(null);
+                  setPendingSuccessors([]);
+                  setHighlightedVariable(null);
+                  return;
+                } else {
+                  // 继续回溯：清空当前块，让下次调用继续回溯
+                  // 这样下次调用时，由于 currentBlock 为 null，会检查是否有待处理的块
+                  // 但实际上，由于 currentBlock 为 null，handleNextStep 会直接 return
+                  // 所以我们需要在这里手动处理继续回溯的逻辑
+                  // 实际上，我们应该在这里继续回溯，而不是等待下次调用
+                  // 但为了避免无限递归，我们使用一个循环来处理回溯
+                  // 简化处理：直接在这里继续回溯，直到找到未访问的块或 DFS 栈为空
+                  let continueBacktracking = true;
+                  let currentDfsStack = newDfsStack;
+                  let currentVisitedForBacktrack = new Set(currentVisited);
+                  
+                  while (continueBacktracking && currentDfsStack.length > 0) {
+                    const parentCtx = currentDfsStack[currentDfsStack.length - 1]!;
+                    const newDfsStack2 = currentDfsStack.slice(0, -1);
+                    
+                    if (parentCtx.pendingSuccessors.length > 0) {
+                      const nextItem3 = parentCtx.pendingSuccessors[0]!;
+                      const remainingSuccessors3 = parentCtx.pendingSuccessors.slice(1);
+                      const nextBlock3 = nextItem3.block;
+                      const nextSnapshot3 = nextItem3.snapshot;
+                      
+                      // 检查该块是否已访问
+                      if (currentVisitedForBacktrack.has(nextBlock3.id)) {
+                        // 已访问，继续处理下一个后继块
+                        if (remainingSuccessors3.length > 0) {
+                          // 还有剩余的后继块，更新栈并继续
+                          if (remainingSuccessors3.length > 0) {
+                            newDfsStack2.push({
+                              parentSnapshot: parentCtx.parentSnapshot,
+                              pendingSuccessors: remainingSuccessors3
+                            });
+                          }
+                          currentDfsStack = newDfsStack2;
+                          setDfsStack(currentDfsStack);
+                          continue;
+                        } else {
+                          // 没有剩余的后继块，继续回溯
+                          currentDfsStack = newDfsStack2;
+                          setDfsStack(currentDfsStack);
+                          continue;
+                        }
+                      } else {
+                        // 未访问，进入该块
+                        scopeManager.restoreSnapshot(nextSnapshot3);
+                        const newSnapshots3 = new Map(blockSnapshots);
+                        const enteringSnapshot3 = scopeManager.getSnapshot();
+                        newSnapshots3.set(nextBlock3.id, enteringSnapshot3.map(scope => ({
+                          scopeId: scope.scopeId,
+                          variables: scope.variables.map(v => ({ ...v }))
+                        })));
+                        setBlockSnapshots(newSnapshots3);
+                        
+                        if (remainingSuccessors3.length > 0) {
+                          newDfsStack2.push({
+                            parentSnapshot: parentCtx.parentSnapshot,
+                            pendingSuccessors: remainingSuccessors3
+                          });
+                        }
+                        setDfsStack(newDfsStack2);
+                        
+                        setCurrentBlock(nextBlock3);
+                        setCurrentStepIndex(0);
+                        setActiveBlockId(nextBlock3.id);
+                        setCurrentBlockId(nextBlock3.id);
+                        setPendingSuccessors([]);
+                        setHighlightedVariable(null);
+                        
+                        const blockSteps3: StackStep[] = [];
+                        blockSteps3.push({
+                          stepIndex: 0,
+                          statement: `进入块 ${nextBlock3.id}`,
+                          scopeStack: scopeManager.getSnapshot()
+                        });
+                        
+                        setStackFrames([{
+                          blockId: nextBlock3.id,
+                          steps: blockSteps3
+                        }]);
+                        
+                        setScopeManager(scopeManager);
+                        continueBacktracking = false;
+                        break;
+                      }
+                    } else {
+                      // 没有待处理的后继块，继续回溯
+                      currentDfsStack = newDfsStack2;
+                      setDfsStack(currentDfsStack);
+                    }
+                  }
+                  
+                  if (continueBacktracking && currentDfsStack.length === 0) {
+                    // 所有块都执行完毕
+                    setSuccessMessage('所有基本块已执行完毕！');
+                    setIsStepping(false);
+                    setIsTraversalCompleted(true);
+                    setIsAutoExecuting(false);
+                    if (autoExecuteIntervalRef.current) {
+                      clearInterval(autoExecuteIntervalRef.current);
+                      autoExecuteIntervalRef.current = null;
+                    }
+                    setCurrentBlock(null);
+                    setCurrentStepIndex(-1);
+                    setCurrentBlockId(null);
+                    setPendingSuccessors([]);
+                    setHighlightedVariable(null);
+                  }
+                  return;
+                }
+              }
             }
+            
+            // 首次访问该块
+            console.log(`[回溯进入2] 从回溯进入块 ${nextBlock.id}（未访问过）`);
+            scopeManager.restoreSnapshot(nextSnapshot);
+            const newSnapshots = new Map(blockSnapshots);
+            const enteringSnapshot = scopeManager.getSnapshot();
+            newSnapshots.set(nextBlock.id, enteringSnapshot.map(scope => ({
+              scopeId: scope.scopeId,
+              variables: scope.variables.map(v => ({ ...v }))
+            })));
+            setBlockSnapshots(newSnapshots);
             
             // 如果还有剩余的后继块，更新栈
             if (remainingSuccessors.length > 0) {
@@ -670,6 +1103,7 @@ const StackScopePage: React.FC = () => {
             setActiveBlockId(nextBlock.id);
             setCurrentBlockId(nextBlock.id);
             setPendingSuccessors([]);
+            setHighlightedVariable(null);
             
             // 处理新块的第一个步骤
             const blockSteps: StackStep[] = [];

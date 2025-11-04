@@ -89,6 +89,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
   }, [currentFrame, selectedStepIndex]);
 
   // 根据作用域解析规则查找变量：从栈顶（最内层）向栈底（最外层）查找第一个匹配的变量
+  // 只匹配 init: true 的变量（已初始化的变量）
   // 必须在早期返回之前定义，以保证 Hooks 调用顺序一致
   const findHighlightedVariable = React.useMemo(() => {
     if (!highlightedVariable || !currentStep) return null;
@@ -97,7 +98,8 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
     // scopeStack[length-1] 是最内层（栈顶），scopeStack[0] 是最外层（栈底）
     for (let i = currentStep.scopeStack.length - 1; i >= 0; i--) {
       const scope = currentStep.scopeStack[i]!;
-      const foundVarIndex = scope.variables.findIndex(v => v.name === highlightedVariable);
+      // 只匹配 init: true 的变量
+      const foundVarIndex = scope.variables.findIndex(v => v.name === highlightedVariable && v.init);
       if (foundVarIndex !== -1) {
         // 找到第一个匹配的变量，返回其作用域索引和变量索引
         return { scopeIndex: i, variableIndex: foundVarIndex };

@@ -1,6 +1,7 @@
 int checkGrade() {
     int grade = 0;
     int score = 70;
+    int kkk1 = 0;
     {
       int i = 0;
       score = score + 1;
@@ -30,7 +31,7 @@ int checkGrade() {
       grade = 3; // C 级
     }
     int k = 9990;
-
+    kkk1 = 1000;
     if (k) {
       int jj = 111;
       {

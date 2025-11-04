@@ -1,7 +1,7 @@
 // 作用域管理器 - 用于栈布局可视化
 export interface ScopeInfo {
   scopeId: string;
-  variables: Array<{ name: string; offset: number }>;
+  variables: Array<{ name: string; offset: number; init: boolean }>;
 }
 
 export class ScopeManager {
@@ -17,12 +17,13 @@ export class ScopeManager {
     const previousVarCount = this.getTotalPreviousVarCount();
 
     // 创建新作用域并分配 offset
+    // 变量初始状态 init: false（还未声明/初始化）
     const scopeInfo: ScopeInfo = {
       scopeId: scopeId,
       variables: variableNames.map((name, index) => {
         // offset = -(前面所有作用域的总变量数 + 本作用域内的顺序索引 + 1)
         const offset = -(previousVarCount + index + 1);
-        return { name, offset };
+        return { name, offset, init: false };
       })
     };
 
@@ -78,6 +79,22 @@ export class ScopeManager {
       scopeId: scope.scopeId,
       variables: scope.variables.map(v => ({ ...v }))
     }));
+  }
+
+  /**
+   * 标记变量为已初始化（声明过）
+   * 在 int 或 let 声明时调用
+   */
+  markVariableInitialized(name: string): void {
+    // 从内层到外层查找，标记第一个找到的变量
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const scope = this.scopes[i]!;
+      const varIndex = scope.variables.findIndex(v => v.name === name);
+      if (varIndex !== -1) {
+        scope.variables[varIndex]!.init = true;
+        return;
+      }
+    }
   }
 
   /**

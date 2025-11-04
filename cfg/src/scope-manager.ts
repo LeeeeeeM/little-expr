@@ -1,6 +1,12 @@
+// 变量信息
+interface VariableInfo {
+  offset: number;
+  init: boolean; // 是否已初始化（声明过）：int 或 let 声明时设置为 true
+}
+
 // 作用域管理器 - 简化设计，统一处理所有作用域
 export class ScopeManager {
-  private scopes: Map<string, number>[] = []; // 作用域栈（不再有默认的根作用域）
+  private scopes: Map<string, VariableInfo>[] = []; // 作用域栈（不再有默认的根作用域）
   private functionParameters: string[] = []; // 函数参数列表
   private forLoopVariables: Map<string, number> = new Map(); // for循环变量
   private inForLoop = false; // 是否在for循环中
@@ -15,12 +21,13 @@ export class ScopeManager {
     const prevScopeVarCount = this.getTotalPreviousVarCount();
     
     // 创建新作用域并分配 offset
-    const newScope = new Map<string, number>();
+    // 变量初始状态 init: false（还未声明/初始化）
+    const newScope = new Map<string, VariableInfo>();
     for (let i = 0; i < variableNames.length; i++) {
       const varName = variableNames[i]!;
       // offset = -(前面所有作用域的总变量数 + 本作用域内的顺序索引 + 1)
       const offset = -(prevScopeVarCount + i + 1);
-      newScope.set(varName, offset);
+      newScope.set(varName, { offset, init: false });
     }
     
     // 压入作用域栈
@@ -59,6 +66,7 @@ export class ScopeManager {
   /**
    * 获取变量的 offset
    * 在生成代码时，变量应该已经在作用域中（通过 enterScope 分配）
+   * 只返回已初始化（init: true）的变量
    */
   getVariableOffset(name: string): number | null {
     // 首先检查for循环变量
@@ -66,11 +74,15 @@ export class ScopeManager {
       return this.forLoopVariables.get(name)!;
     }
     
-    // 从内层到外层查找
+    // 从内层到外层查找，只匹配 init: true 的变量
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       const scope = this.scopes[i];
       if (scope && scope.has(name)) {
-        return scope.get(name)!;
+        const info = scope.get(name)!;
+        if (info.init) {
+          return info.offset;
+        }
+        // 如果当前作用域的变量未初始化，继续查找外层（作用域遮蔽规则）
       }
     }
     
@@ -78,6 +90,53 @@ export class ScopeManager {
     const paramIndex = this.functionParameters.indexOf(name);
     if (paramIndex !== -1) {
       return paramIndex + 2; // 参数从 ebp+2 开始（跳过返回地址）
+    }
+    
+    return null;
+  }
+  
+  /**
+   * 标记变量为已初始化（声明过）
+   * 在 int 或 let 声明时调用
+   */
+  markVariableInitialized(name: string): void {
+    // 从内层到外层查找，标记第一个找到的变量
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const scope = this.scopes[i];
+      if (scope && scope.has(name)) {
+        const info = scope.get(name)!;
+        info.init = true;
+        return;
+      }
+    }
+  }
+
+  /**
+   * 获取变量信息（包括 offset 和 init 状态）
+   * 只返回已初始化（init: true）的变量
+   */
+  getVariableInfo(name: string): { offset: number; init: boolean } | null {
+    // 首先检查for循环变量
+    if (this.inForLoop && this.forLoopVariables.has(name)) {
+      return { offset: this.forLoopVariables.get(name)!, init: true };
+    }
+    
+    // 从内层到外层查找，只匹配 init: true 的变量
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const scope = this.scopes[i];
+      if (scope && scope.has(name)) {
+        const info = scope.get(name)!;
+        if (info.init) {
+          return info;
+        }
+        // 如果当前作用域的变量未初始化，继续查找外层（作用域遮蔽规则）
+      }
+    }
+    
+    // 检查是否是函数参数
+    const paramIndex = this.functionParameters.indexOf(name);
+    if (paramIndex !== -1) {
+      return { offset: paramIndex + 2, init: true }; // 参数从 ebp+2 开始
     }
     
     return null;
@@ -129,19 +188,24 @@ export class ScopeManager {
   /**
    * 获取当前作用域
    */
-  getCurrentScope(): Map<string, number> | null {
+  getCurrentScope(): Map<string, VariableInfo> | null {
     return this.scopes.length > 0 ? this.scopes[this.scopes.length - 1]! : null;
   }
   
   /**
    * 查找变量（从外层到内层，用于 return 语句查找最外层变量）
+   * 只返回已初始化（init: true）的变量
    */
   getFunctionLevelVariable(name: string): number | null {
-    // 从外层到内层查找
+    // 从外层到内层查找，只匹配 init: true 的变量
     for (let i = 0; i < this.scopes.length; i++) {
       const scope = this.scopes[i];
       if (scope && scope.has(name)) {
-        return scope.get(name)!;
+        const info = scope.get(name)!;
+        if (info.init) {
+          return info.offset;
+        }
+        // 如果当前作用域的变量未初始化，继续查找下一层
       }
     }
     
@@ -155,18 +219,18 @@ export class ScopeManager {
   }
 
   /**
-   * 获取所有变量信息
+   * 获取所有变量信息（只返回已初始化的变量）
    */
   getAllVariables(): Map<string, { offset: number }> {
     const result = new Map<string, { offset: number }>();
     
-    // 遍历所有作用域（从内层到外层，内层优先）
+    // 遍历所有作用域（从内层到外层，内层优先），只返回 init: true 的变量
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       const scope = this.scopes[i];
       if (scope) {
-        for (const [name, offset] of scope) {
-          if (!result.has(name)) {
-            result.set(name, { offset });
+        for (const [name, info] of scope) {
+          if (info.init && !result.has(name)) {
+            result.set(name, { offset: info.offset });
           }
         }
       }
@@ -177,14 +241,14 @@ export class ScopeManager {
 
   /**
    * 保存当前作用域链的快照
-   * 返回作用域栈（scopes）的深拷贝
+   * 返回作用域栈（scopes）的深拷贝，包含完整的 VariableInfo（offset 和 init）
    */
-  saveSnapshot(): Map<string, number>[] {
-    // 深拷贝 scopes 数组和每个 Map
+  saveSnapshot(): Map<string, VariableInfo>[] {
+    // 深拷贝 scopes 数组和每个 Map，保存完整的 VariableInfo
     return this.scopes.map(scope => {
-      const scopeCopy = new Map<string, number>();
-      for (const [name, offset] of scope) {
-        scopeCopy.set(name, offset);
+      const scopeCopy = new Map<string, VariableInfo>();
+      for (const [name, info] of scope) {
+        scopeCopy.set(name, { offset: info.offset, init: info.init });
       }
       return scopeCopy;
     });
@@ -192,17 +256,17 @@ export class ScopeManager {
 
   /**
    * 从快照恢复作用域链
-   * @param snapshot 之前保存的快照
+   * @param snapshot 之前保存的快照（包含完整的 VariableInfo）
    */
-  restoreSnapshot(snapshot: Map<string, number>[]): void {
+  restoreSnapshot(snapshot: Map<string, VariableInfo>[]): void {
     // 清空当前作用域栈
     this.scopes = [];
     
-    // 深拷贝快照中的每个作用域
+    // 深拷贝快照中的每个作用域，恢复完整的 VariableInfo（包括 offset 和 init）
     this.scopes = snapshot.map(scope => {
-      const scopeCopy = new Map<string, number>();
-      for (const [name, offset] of scope) {
-        scopeCopy.set(name, offset);
+      const scopeCopy = new Map<string, VariableInfo>();
+      for (const [name, info] of scope) {
+        scopeCopy.set(name, { offset: info.offset, init: info.init });
       }
       return scopeCopy;
     });

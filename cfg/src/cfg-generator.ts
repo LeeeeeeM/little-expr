@@ -39,7 +39,7 @@ export interface BasicBlock {
   isEntry?: boolean;
   isExit?: boolean;
   visited?: boolean;  // 用于 DFS 遍历标记
-  scopeSnapshot?: Map<string, number>[];  // 该块结束时的作用域快照
+  scopeSnapshot?: Map<string, { offset: number; init: boolean }>[];  // 该块结束时的作用域快照
 }
 
 export interface ControlFlowGraph {

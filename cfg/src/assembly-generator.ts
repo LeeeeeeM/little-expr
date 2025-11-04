@@ -7,7 +7,6 @@ import { StatementType } from './types';
 export class AssemblyGenerator {
   private scopeManager: ScopeManager;
   private lines: string[] = [];
-  private declaredVariablesInCurrentBlock: Set<string> = new Set(); // 当前块中已声明的变量
 
   constructor(scopeManager: ScopeManager) {
     this.scopeManager = scopeManager;
@@ -45,7 +44,7 @@ export class AssemblyGenerator {
    * @param block 当前块
    * @param incomingSnapshot 进入该块时应该的作用域快照（null 表示首次访问）
    */
-  private visitBlock(block: BasicBlock, incomingSnapshot: Map<string, number>[] | null): void {
+  private visitBlock(block: BasicBlock, incomingSnapshot: Map<string, { offset: number; init: boolean }>[] | null): void {
     // 如果已经访问过，验证作用域栈一致性
     if (block.visited) {
       // 出口块不验证快照（因为可能是不同路径汇聚的死代码点）
@@ -81,23 +80,12 @@ export class AssemblyGenerator {
     // 生成块标签
     this.lines.push(`${block.id}:`);
     
-    // 重置已声明变量集合（用于处理作用域遮蔽问题）
-    this.declaredVariablesInCurrentBlock.clear();
-    
     // 处理块内语句
     let hasReturn = false;
     for (const stmt of block.statements) {
       // 如果已经遇到 return，不再处理后续语句（避免处理不会执行的 EndCheckPoint）
       if (hasReturn) {
         break;
-      }
-      
-      // 如果是变量声明，记录到已声明集合中（在生成语句之前）
-      if (stmt.type === StatementType.VARIABLE_DECLARATION || stmt.type === StatementType.LET_DECLARATION) {
-        const varName = (stmt as any).name;
-        if (varName) {
-          this.declaredVariablesInCurrentBlock.add(varName);
-        }
       }
       
       this.generateStatement(stmt);
@@ -134,9 +122,9 @@ export class AssemblyGenerator {
       // 注意：每个后继块都会接收这个快照，并在 visitBlock 开始时恢复它
       // 所以即使 scopeManager 在前一个后继块中被修改了，下一个后继块访问时会自动恢复
       const snapshotCopy = currentSnapshot.map(scope => {
-        const scopeCopy = new Map<string, number>();
-        for (const [name, offset] of scope) {
-          scopeCopy.set(name, offset);
+        const scopeCopy = new Map<string, { offset: number; init: boolean }>();
+        for (const [name, info] of scope) {
+          scopeCopy.set(name, { offset: info.offset, init: info.init });
         }
         return scopeCopy;
       });
@@ -216,7 +204,7 @@ export class AssemblyGenerator {
     // 验证变量名是否一致（可选，用于调试）
     // 注意：由于 DFS 遍历可能在不同路径访问同一个块，作用域栈的状态可能不匹配
     // 所以这个验证可能不够准确，仅用于调试
-    const scopes = (this.scopeManager as any).scopes as Map<string, number>[];
+    const scopes = (this.scopeManager as any).scopes as Map<string, { offset: number; init: boolean }>[];
     const currentScope = this.scopeManager.getCurrentScope();
     if (currentScope) {
       const currentVarNames = Array.from(currentScope.keys());
@@ -279,6 +267,9 @@ export class AssemblyGenerator {
   private generateVariableDeclaration(varDecl: any): void {
     const varName = varDecl.name;
     
+    // 标记变量为已初始化
+    this.scopeManager.markVariableInitialized(varName);
+    
     // 变量应该已经在作用域中（通过 StartCheckPoint 分配）
     const offset = this.scopeManager.getVariableOffset(varName);
     if (offset === null) {
@@ -327,45 +318,10 @@ export class AssemblyGenerator {
   
   /**
    * 为赋值语句查找变量 offset
-   * 如果变量在当前作用域但还没有声明，则查找外层作用域（处理作用域遮蔽问题）
+   * 使用 scopeManager 的 getVariableOffset，它已经实现了正确的变量查找逻辑（只匹配 init: true 的变量）
    */
   private getVariableOffsetForAssignment(varName: string): number | null {
-    const scopes = (this.scopeManager as any).scopes as Map<string, number>[];
-    
-    // 如果当前作用域栈为空，直接查找函数参数
-    if (scopes.length === 0) {
-      const paramIndex = (this.scopeManager as any).functionParameters.indexOf(varName);
-      if (paramIndex !== -1) {
-        return paramIndex + 2;
-      }
-      return null;
-    }
-    
-    // 检查最内层作用域（当前作用域）
-    const currentScope = scopes[scopes.length - 1];
-    if (currentScope && currentScope.has(varName)) {
-      // 如果变量在当前作用域，但还没有声明，则查找外层作用域
-      if (!this.declaredVariablesInCurrentBlock.has(varName)) {
-        // 从上一层作用域开始查找（跳过当前作用域,但考虑到 for，从当前开始查找）
-        for (let i = scopes.length - 1; i >= 0; i--) {
-          const scope = scopes[i];
-          if (scope && scope.has(varName)) {
-            return scope.get(varName)!;
-          }
-        }
-        
-        // 如果外层作用域也没找到，检查函数参数
-        const paramIndex = (this.scopeManager as any).functionParameters.indexOf(varName);
-        if (paramIndex !== -1) {
-          return paramIndex + 2;
-        }
-      } else {
-        // 变量已经在当前作用域声明，返回当前作用域的 offset
-        return currentScope.get(varName)!;
-      }
-    }
-    
-    // 如果当前作用域没有该变量，使用正常的查找逻辑（从内到外）
+    // 使用 scopeManager 的查找逻辑，它会自动跳过未初始化的变量
     return this.scopeManager.getVariableOffset(varName);
   }
 
@@ -644,8 +600,8 @@ export class AssemblyGenerator {
    * 比较两个快照是否相等
    */
   private snapshotsEqual(
-    snapshot1: Map<string, number>[],
-    snapshot2: Map<string, number>[]
+    snapshot1: Map<string, { offset: number; init: boolean }>[],
+    snapshot2: Map<string, { offset: number; init: boolean }>[]
   ): boolean {
     if (snapshot1.length !== snapshot2.length) {
       return false;
@@ -659,8 +615,9 @@ export class AssemblyGenerator {
         return false;
       }
       
-      for (const [name, offset] of scope1) {
-        if (!scope2.has(name) || scope2.get(name) !== offset) {
+      for (const [name, info1] of scope1) {
+        const info2 = scope2.get(name);
+        if (!info2 || info1.offset !== info2.offset || info1.init !== info2.init) {
           return false;
         }
       }
@@ -672,9 +629,9 @@ export class AssemblyGenerator {
   /**
    * 快照转字符串（用于调试）
    */
-  private snapshotToString(snapshot: Map<string, number>[]): string {
+  private snapshotToString(snapshot: Map<string, { offset: number; init: boolean }>[]): string {
     return snapshot.map((scope, idx) => {
-      const vars = Array.from(scope.entries()).map(([name, offset]) => `${name}:${offset}`).join(', ');
+      const vars = Array.from(scope.entries()).map(([name, info]) => `${name}:${info.offset}${info.init ? '*' : ''}`).join(', ');
       return `scope[${idx}]: {${vars}}`;
     }).join(' | ');
   }

@@ -543,17 +543,13 @@ const StackScopePage: React.FC = () => {
       // 标记当前块为已访问
       const newVisited = new Set(visitedBlocks);
       newVisited.add(currentBlock.id);
-      console.log(`[执行完毕] 块 ${currentBlock.id} 执行完毕，标记为已访问`);
-      console.log(`[当前已访问]`, Array.from(newVisited));
       setVisitedBlocks(newVisited);
       
       // 将当前块的所有未访问的后继块加入待处理队列（深拷贝快照）
       // 注意：应该使用 newVisited（包含当前块的最新状态），而不是旧的 visitedBlocks state
       const newPendingSuccessors: Array<{block: BasicBlock, snapshot: ScopeInfo[]}> = [];
-      console.log(`[收集后继] 块 ${currentBlock.id} 的后继块:`, currentBlock.successors.map(s => s.id));
       for (const successor of currentBlock.successors) {
         const isVisited = newVisited.has(successor.id);
-        console.log(`[检查后继] 后继块 ${successor.id} 是否已访问: ${isVisited}`);
         if (!isVisited) {
           // 深拷贝快照（ScopeInfo[] 已经是对象数组，需要深拷贝）
           const snapshotCopy: ScopeInfo[] = currentSnapshot.map(scope => ({
@@ -561,12 +557,8 @@ const StackScopePage: React.FC = () => {
             variables: scope.variables.map(v => ({ ...v }))
           }));
           newPendingSuccessors.push({ block: successor, snapshot: snapshotCopy });
-          console.log(`[加入队列] 后继块 ${successor.id} 加入待处理队列`);
-        } else {
-          console.log(`[跳过] 后继块 ${successor.id} 已访问，跳过`);
         }
       }
-      console.log(`[队列结果] 待处理后继块:`, newPendingSuccessors.map(s => s.block.id));
       
       // 从队列中取出下一个块
       if (newPendingSuccessors.length > 0) {
@@ -593,10 +585,8 @@ const StackScopePage: React.FC = () => {
         // 检查该块是否已经访问过（可能在其他路径中已访问）
         // 如果已访问过，跳过该块，直接处理下一个后继块（类似 assembly-generator 的逻辑）
         // 注意：使用 newVisited 而不是 visitedBlocks，因为 newVisited 包含当前块的最新状态
-        console.log(`[准备进入] 准备进入块 ${nextBlock.id}，检查是否已访问: ${newVisited.has(nextBlock.id)}`);
         if (newVisited.has(nextBlock.id)) {
           // 已访问过，跳过该块，继续处理下一个后继块
-          console.log(`[跳过块] 块 ${nextBlock.id} 已访问过，跳过`);
           // 如果有剩余的后继块，继续处理
           if (remainingSuccessors.length > 0) {
             const nextItem = remainingSuccessors[0]!;
@@ -670,10 +660,8 @@ const StackScopePage: React.FC = () => {
                 
                 // 检查该块是否已经访问过（可能在回溯过程中已被访问）
                 // 注意：使用 newVisited 而不是 visitedBlocks，因为 newVisited 包含当前块的最新状态
-                console.log(`[回溯检查] 从 DFS 栈弹出块 ${nextBlock2.id}，检查是否已访问: ${newVisited.has(nextBlock2.id)}`);
                 if (newVisited.has(nextBlock2.id)) {
                   // 已访问过，跳过该块，继续处理下一个后继块
-                  console.log(`[回溯跳过] 从 DFS 栈弹出的块 ${nextBlock2.id} 已访问过，跳过`);
                   if (remainingSuccessors2.length > 0) {
                     const nextItem3 = remainingSuccessors2[0]!;
                     const remainingSuccessors3 = remainingSuccessors2.slice(1);
@@ -741,7 +729,6 @@ const StackScopePage: React.FC = () => {
                   }
                 } else {
                   // 未访问过，正常处理
-                  console.log(`[回溯进入] 从 DFS 栈进入块 ${nextBlock2.id}（未访问过）`);
                   const savedSnapshot2 = blockSnapshots.get(nextBlock2.id);
                   if (savedSnapshot2) {
                     scopeManager.restoreSnapshot(savedSnapshot2);
@@ -818,7 +805,6 @@ const StackScopePage: React.FC = () => {
         }
         
         // 首次访问该块，恢复传入的快照（父块退出时的快照），并保存为进入快照
-        console.log(`[进入新块] 首次访问块 ${nextBlock.id}`);
         scopeManager.restoreSnapshot(nextSnapshot);
         const newSnapshots = new Map(blockSnapshots);
         // 深拷贝保存进入时的快照
@@ -889,10 +875,8 @@ const StackScopePage: React.FC = () => {
             // 检查该块是否已经访问过（已执行完毕）
             // 如果已访问过，跳过该块，继续处理下一个后继块
             // 注意：使用 currentVisited 而不是 visitedBlocks，确保包含当前块的最新状态
-            console.log(`[回溯检查2] 检查块 ${nextBlock.id} 是否已访问: ${currentVisited.has(nextBlock.id)}`);
             if (currentVisited.has(nextBlock.id)) {
               // 已访问过，跳过该块，继续处理下一个后继块
-              console.log(`[回溯跳过2] 块 ${nextBlock.id} 已访问过，跳过`);
               if (remainingSuccessors.length > 0) {
                 const nextItem2 = remainingSuccessors[0]!;
                 const remainingSuccessors2 = remainingSuccessors.slice(1);
@@ -1078,7 +1062,6 @@ const StackScopePage: React.FC = () => {
             }
             
             // 首次访问该块
-            console.log(`[回溯进入2] 从回溯进入块 ${nextBlock.id}（未访问过）`);
             scopeManager.restoreSnapshot(nextSnapshot);
             const newSnapshots = new Map(blockSnapshots);
             const enteringSnapshot = scopeManager.getSnapshot();

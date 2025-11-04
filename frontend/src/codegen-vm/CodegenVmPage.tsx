@@ -9,6 +9,7 @@ import type { ControlFlowGraph } from './lib/cfg-types';
 import type { BasicBlock } from './lib/cfg-types';
 import { ScopeManager, type ScopeInfo } from './lib/scope-manager';
 import { AssemblyGenerator } from './lib/assembly-generator';
+import { optimizeAssembly } from './lib/assembly-optimizer';
 
 const PRESET_CODE_SAMPLES = [
   { 
@@ -135,6 +136,8 @@ const CodegenVmPage: React.FC = () => {
   const [dfsStack, setDfsStack] = useState<Array<{parentSnapshot: ScopeInfo[], pendingSuccessors: Array<{block: BasicBlock, snapshot: ScopeInfo[]}>}>>([]); // DFS 遍历栈：每层保存父快照和待处理的后继块
   const [assemblyLines, setAssemblyLines] = useState<AssemblyLine[]>([]); // 生成的汇编代码行
   const [currentAssemblyLineIndex, setCurrentAssemblyLineIndex] = useState<number | null>(null); // 当前执行的汇编代码行索引
+  const [optimizedAssemblyLines, setOptimizedAssemblyLines] = useState<AssemblyLine[]>([]); // 优化后的汇编代码行
+  const [isOptimized, setIsOptimized] = useState(false); // 是否显示优化后的代码
   const assemblyGeneratorRef = useRef<AssemblyGenerator | null>(null); // 汇编生成器实例
   
   // 根据是否有错误消息判断语法是否正确（有错误消息就是语法错误，否则默认正确）
@@ -157,6 +160,9 @@ const CodegenVmPage: React.FC = () => {
     setIsAutoExecuting(false);
     setAssemblyLines([]);
     setCurrentAssemblyLineIndex(null);
+    setOptimizedAssemblyLines([]);
+    setIsOptimized(false);
+    assemblyGeneratorRef.current = null;
     if (autoExecuteIntervalRef.current) {
       clearInterval(autoExecuteIntervalRef.current);
       autoExecuteIntervalRef.current = null;
@@ -173,6 +179,30 @@ const CodegenVmPage: React.FC = () => {
     setStackFrames([]);
     setCurrentBlockId(null);
     
+    // 重置所有执行相关状态
+    setVisitedBlocks(new Set());
+    setScopeManager(null);
+    setCurrentBlock(null);
+    setCurrentStepIndex(-1);
+    setIsStepping(false);
+    setActiveBlockId(null);
+    setBlockSnapshots(new Map());
+    setPendingSuccessors([]);
+    setDfsStack([]);
+    setIsTraversalCompleted(false);
+    setIsAutoExecuting(false);
+    setAssemblyLines([]);
+    setCurrentAssemblyLineIndex(null);
+    setOptimizedAssemblyLines([]);
+    setIsOptimized(false);
+    assemblyGeneratorRef.current = null;
+    setHighlightedVariable(null);
+    // 清除自动执行定时器
+    if (autoExecuteIntervalRef.current) {
+      clearInterval(autoExecuteIntervalRef.current);
+      autoExecuteIntervalRef.current = null;
+    }
+    
     try {
       const compiler = new Compiler();
       const compileResult = compiler.compile(code);
@@ -188,18 +218,10 @@ const CodegenVmPage: React.FC = () => {
         setCfg(compileResult.cfgs[0]!);
         setIsRunning(false);
         setSuccessMessage(`编译成功！生成了 ${compileResult.cfgs.length} 个函数的 CFG`);
-        // 重置逐步执行状态
-        setVisitedBlocks(new Set());
-        setScopeManager(null);
-        setCurrentBlock(null);
-        setCurrentStepIndex(-1);
-        setIsStepping(false);
-        setActiveBlockId(null);
-        setStackFrames([]);
-        setBlockSnapshots(new Map());
-        setPendingSuccessors([]);
-        setDfsStack([]);
-        setIsTraversalCompleted(false);
+        // 重新聚焦到入口块
+        if (compileResult.cfgs[0]!.entryBlock) {
+          setActiveBlockId(compileResult.cfgs[0]!.entryBlock.id);
+        }
       } else {
         setIsRunning(false);
         setErrorMessage('未找到函数定义');
@@ -589,7 +611,7 @@ const CodegenVmPage: React.FC = () => {
         assemblyGeneratorRef.current.generateStatement(nextStmt);
       } else {
         // 如果没有 assemblyGenerator（理论上不应该发生），则使用 processStatementScope
-        processStatementScope(nextStmt, scopeManager);
+      processStatementScope(nextStmt, scopeManager);
       }
       
       // 更新步骤索引（下一个 flattenedStatements 的索引）
@@ -1281,7 +1303,34 @@ const CodegenVmPage: React.FC = () => {
       clearInterval(autoExecuteIntervalRef.current);
       autoExecuteIntervalRef.current = null;
     }
+    // 清空汇编代码
+    setAssemblyLines([]);
+    setCurrentAssemblyLineIndex(null);
+    setOptimizedAssemblyLines([]);
+    setIsOptimized(false);
+    assemblyGeneratorRef.current = null;
   }, [cfg]);
+
+  // 切换优化代码显示
+  const handleOptimizeToggle = useCallback(() => {
+    if (!cfg || assemblyLines.length === 0) {
+      return;
+    }
+    
+    if (!isOptimized) {
+      // 切换到优化模式：计算优化后的代码
+      try {
+        const optimized = optimizeAssembly(assemblyLines, cfg);
+        setOptimizedAssemblyLines(optimized);
+        setIsOptimized(true);
+      } catch (error) {
+        console.error('优化汇编代码失败:', error);
+      }
+    } else {
+      // 切换回原始模式
+      setIsOptimized(false);
+    }
+  }, [cfg, assemblyLines, isOptimized]);
 
   // 自动执行处理
   React.useEffect(() => {
@@ -1471,7 +1520,11 @@ const CodegenVmPage: React.FC = () => {
             <AssemblyVisualizer
               assemblyLines={assemblyLines}
               currentLineIndex={currentAssemblyLineIndex}
-            />
+              optimizedLines={optimizedAssemblyLines}
+              isOptimized={isOptimized}
+              showOptimizeButton={assemblyLines.length > 0 && isTraversalCompleted}
+              onOptimizeToggle={handleOptimizeToggle}
+              />
           </div>
         </div>
       </main>

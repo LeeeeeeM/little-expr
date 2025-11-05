@@ -1,5 +1,5 @@
 import React from 'react';
-import type { StackFrame } from '../StackScopePage';
+import type { StackFrame, ScopeInfo } from '../CodegenVmPage';
 
 interface StackVisualizerProps {
   stackFrames: StackFrame[];
@@ -99,7 +99,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
     for (let i = currentStep.scopeStack.length - 1; i >= 0; i--) {
       const scope = currentStep.scopeStack[i]!;
       // 只匹配 init: true 的变量
-      const foundVarIndex = scope.variables.findIndex(v => v.name === highlightedVariable && v.init);
+      const foundVarIndex = scope.variables.findIndex((v: { name: string; offset: number; init: boolean }) => v.name === highlightedVariable && v.init);
       if (foundVarIndex !== -1) {
         // 找到第一个匹配的变量，返回其作用域索引和变量索引
         return { scopeIndex: i, variableIndex: foundVarIndex };
@@ -122,7 +122,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
 
   // 计算栈的总深度（变量总数）
   const totalDepth = currentStep.scopeStack.reduce(
-    (sum, scope) => sum + scope.variables.length,
+    (sum: number, scope: ScopeInfo) => sum + scope.variables.length,
     0
   );
 
@@ -152,7 +152,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
             {/* 变量列表 */}
             {scope.variables.length > 0 ? (
               <div className="space-y-1 ml-2">
-                {scope.variables.map((variable, varIndex) => {
+                {scope.variables.map((variable: { name: string; offset: number; init: boolean }, varIndex: number) => {
                   const absoluteOffset = Math.abs(variable.offset);
                   // 只高亮通过作用域解析找到的第一个匹配变量（最内层的）
                   const isHighlighted = findHighlightedVariable?.scopeIndex === i && 
@@ -163,15 +163,24 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
                       className={`rounded px-2 py-1.5 text-xs transition-all ${
                         isHighlighted
                           ? 'bg-yellow-200 border-2 border-yellow-500 shadow-md animate-pulse'
-                          : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          : variable.init
+                          ? 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          : 'bg-gray-50 border border-gray-200 border-dashed opacity-60 hover:bg-gray-100'
                       }`}
                     >
                       <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
                         <span className={`font-mono font-medium ${
-                          isHighlighted ? 'text-yellow-900 font-bold' : 'text-gray-700'
+                            isHighlighted ? 'text-yellow-900 font-bold' : variable.init ? 'text-gray-700' : 'text-gray-500'
                         }`}>
                           {variable.name}
                         </span>
+                          <span className={`text-[10px] ${
+                            variable.init ? 'text-green-600' : 'text-gray-400'
+                          }`} title={variable.init ? '已初始化' : '未初始化'}>
+                            {variable.init ? '✓' : '○'}
+                          </span>
+                        </div>
                         <span className={`font-mono text-[10px] ${
                           isHighlighted ? 'text-yellow-700' : 'text-gray-600'
                         }`}>
@@ -211,7 +220,7 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
               ref={stepsContainerRef}
               className="flex space-x-1 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
             >
-              {currentFrame.steps.map((step, idx) => {
+              {currentFrame.steps.map((step: { stepIndex: number; statement: string; scopeStack: ScopeInfo[] }, idx: number) => {
                 // 在自动执行模式下，只允许点击已经执行过的步骤（回看功能）
                 // idx 对应 stepIndex：0 = 进入块，1 = 执行第一个语句后，2 = 执行第二个语句后...
                 const isAutoMode = autoStepIndex !== null && autoStepIndex !== undefined;

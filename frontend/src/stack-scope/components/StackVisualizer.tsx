@@ -163,15 +163,24 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
                       className={`rounded px-2 py-1.5 text-xs transition-all ${
                         isHighlighted
                           ? 'bg-yellow-200 border-2 border-yellow-500 shadow-md animate-pulse'
-                          : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          : variable.init
+                          ? 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
+                          : 'bg-gray-50 border border-gray-200 border-dashed opacity-60 hover:bg-gray-100'
                       }`}
                     >
                       <div className="flex justify-between items-center">
-                        <span className={`font-mono font-medium ${
-                          isHighlighted ? 'text-yellow-900 font-bold' : 'text-gray-700'
-                        }`}>
-                          {variable.name}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-mono font-medium ${
+                            isHighlighted ? 'text-yellow-900 font-bold' : variable.init ? 'text-gray-700' : 'text-gray-500'
+                          }`}>
+                            {variable.name}
+                          </span>
+                          <span className={`text-[10px] ${
+                            variable.init ? 'text-green-600' : 'text-gray-400'
+                          }`} title={variable.init ? '已初始化' : '未初始化'}>
+                            {variable.init ? '✓' : '○'}
+                          </span>
+                        </div>
                         <span className={`font-mono text-[10px] ${
                           isHighlighted ? 'text-yellow-700' : 'text-gray-600'
                         }`}>

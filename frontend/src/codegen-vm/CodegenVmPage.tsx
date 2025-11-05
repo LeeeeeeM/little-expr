@@ -218,10 +218,6 @@ const CodegenVmPage: React.FC = () => {
         setCfg(compileResult.cfgs[0]!);
         setIsRunning(false);
         setSuccessMessage(`编译成功！生成了 ${compileResult.cfgs.length} 个函数的 CFG`);
-        // 重新聚焦到入口块
-        if (compileResult.cfgs[0]!.entryBlock) {
-          setActiveBlockId(compileResult.cfgs[0]!.entryBlock.id);
-        }
       } else {
         setIsRunning(false);
         setErrorMessage('未找到函数定义');

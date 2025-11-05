@@ -27,7 +27,7 @@ export const Menu: React.FC = () => {
     if (currentItem) {
       document.title = currentItem.label;
     } else {
-      document.title = 'BNF 编译器工具';
+      document.title = '编译器祛魅';
     }
   }, [location.pathname]);
 

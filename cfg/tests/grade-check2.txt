@@ -4,13 +4,16 @@ int checkGrade() {
     {
       let i = 0;
       score = score + 1;
+      if (i >= 0) 
+        return 123;
+      
     }
 
     let xxx = 222;
     
     if (score >= 80) {
       let bonusB = 5;
-      grade = 2;
+      grade = 2111;
       let grade = 2;
       {
         grade = grade + 20;

@@ -304,6 +304,11 @@ export class CFGGenerator {
     let entryBlock = currentBlock;
     let exitBlock = currentBlock;
 
+    // 确保 statements 存在
+    if (!blockStmt.statements) {
+      return { blocks: [], entry: currentBlock, exit: currentBlock };
+    }
+
     // 按照理论：线性执行到跳转点，合并连续语句
     for (const stmt of blockStmt.statements) {
       // 跳过空语句
@@ -460,10 +465,28 @@ export class CFGGenerator {
     
     // then分支
     const thenEntryBlock = this.newBlock();
-    const { blocks: thenBlocks, exit: thenExit } = this.generateBlockCFG(
-      ifStmt.thenBranch as BlockStatement,
-      thenEntryBlock
-    );
+    let thenBlocks: BasicBlock[] = [];
+    let thenExit: BasicBlock;
+    
+    // 处理 then 分支：可能是 BlockStatement、IfStatement 或单个语句
+    if (ifStmt.thenBranch.type === StatementType.BLOCK_STATEMENT) {
+      const result = this.generateBlockCFG(
+        ifStmt.thenBranch as BlockStatement,
+        thenEntryBlock
+      );
+      thenBlocks = result.blocks;
+      thenExit = result.exit;
+    } else if (ifStmt.thenBranch.type === StatementType.IF_STATEMENT) {
+      const nestedIfResult = this.generateIfCFG(ifStmt.thenBranch as IfStatement, thenEntryBlock);
+      thenBlocks = nestedIfResult.blocks;
+      thenExit = nestedIfResult.exit;
+    } else {
+      // 单个语句（如 return 123;）
+      const result = this.generateStatementCFG(ifStmt.thenBranch, thenEntryBlock);
+      thenBlocks = result.blocks;
+      thenExit = result.exit;
+    }
+    
     blocks.push(...thenBlocks);
     this.connectBlocks(conditionBlock, thenEntryBlock);
 
@@ -1052,7 +1075,7 @@ export class CFGVisualizer {
         return `Continue语句`;
       case StatementType.BLOCK_STATEMENT:
         const blockStmt = stmt as BlockStatement;
-        if (blockStmt.statements.length === 0) {
+        if (!blockStmt.statements || blockStmt.statements.length === 0) {
           return ``;
         }
         const nonEmptyStatements = blockStmt.statements.filter(s => s.type !== StatementType.EMPTY_STATEMENT);

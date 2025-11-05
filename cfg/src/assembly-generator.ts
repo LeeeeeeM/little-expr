@@ -498,6 +498,8 @@ export class AssemblyGenerator {
         return this.generateBinaryExpression(expression, forCondition);
       case 'UnaryExpression':
         return this.generateUnaryExpression(expression);
+      case 'FunctionCall':
+        return this.generateFunctionCall(expression);
       default:
         return null;
     }
@@ -567,6 +569,15 @@ export class AssemblyGenerator {
       default:
         return 'mov eax, 0';
     }
+  }
+
+  /**
+   * 生成函数调用
+   */
+  private generateFunctionCall(funcCall: any): string {
+    const funcName = funcCall.callee.name;
+    // 生成 call 指令，函数名会在链接时解析
+    return `call ${funcName}`;
   }
 
   /**

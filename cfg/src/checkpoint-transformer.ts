@@ -66,10 +66,14 @@ export class CheckpointTransformer {
       return this.transformForStatement(stmt, depth);
     } else if (stmt.type === 'FunctionDeclaration') {
       // 函数体的 BlockStatement 会被递归处理
-      return {
-        ...stmt,
-        body: this.transformBlockStatement(stmt.body, depth)
-      };
+      if (stmt.body && stmt.body.type === 'BlockStatement') {
+        return {
+          ...stmt,
+          body: this.transformBlockStatement(stmt.body, depth)
+        };
+      }
+      // 如果函数体不是 BlockStatement 或为空，直接返回
+      return stmt;
     }
     // 其他语句类型直接返回
     return stmt;
@@ -82,6 +86,11 @@ export class CheckpointTransformer {
     blockStmt: BlockStatement,
     currentDepth: number
   ): BlockStatement {
+    // 确保 statements 存在
+    if (!blockStmt.statements) {
+      blockStmt.statements = [];
+    }
+    
     // 1. 先递归处理嵌套的 BlockStatement 和其他控制流语句
     const processedStatements = blockStmt.statements.map(stmt =>
       this.transformStatement(stmt, currentDepth + 1)

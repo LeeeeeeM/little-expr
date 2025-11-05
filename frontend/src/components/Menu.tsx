@@ -8,7 +8,7 @@ interface MenuItem {
 
 // 统一定义所有菜单项
 const menuItems: MenuItem[] = [
-  { path: '/', label: '首页 - 栈式优先级爬升可视化' },
+  { path: '/', label: '栈式优先级爬升可视化' },
   { path: '/ast-cfg', label: 'AST CFG 测试页面' },
   { path: '/stack-scope', label: '栈布局可视化' },
   { path: '/codegen-vm', label: '代码生成与虚拟机' },

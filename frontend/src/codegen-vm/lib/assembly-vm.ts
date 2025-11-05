@@ -262,7 +262,7 @@ export class AssemblyVM {
     const srcValue = this.getValue(src);
     const result = destValue + srcValue;
     this.setValue(dest, result);
-    this.updateFlags(result);
+    // 算术运算不更新标志位，只有 cmp 指令才更新标志位
   }
 
   private sub(dest: string, src: string): void {
@@ -270,7 +270,7 @@ export class AssemblyVM {
     const srcValue = this.getValue(src);
     const result = destValue - srcValue;
     this.setValue(dest, result);
-    this.updateFlags(result);
+    // 算术运算不更新标志位，只有 cmp 指令才更新标志位
   }
 
   private mul(operand: string): void {
@@ -278,7 +278,7 @@ export class AssemblyVM {
     const ax = this.state.registers.get('ax')!;
     const result = ax * value;
     this.state.registers.set('ax', result);
-    this.updateFlags(result);
+    // 算术运算不更新标志位，只有 cmp 指令才更新标志位
   }
 
   private div(operand: string): void {
@@ -289,7 +289,7 @@ export class AssemblyVM {
     const ax = this.state.registers.get('ax')!;
     const result = Math.floor(ax / value);
     this.state.registers.set('ax', result);
-    this.updateFlags(result);
+    // 算术运算不更新标志位，只有 cmp 指令才更新标志位
   }
 
   private cmp(left: string, right: string): void {
@@ -382,7 +382,7 @@ export class AssemblyVM {
     const srcValue = this.getValue(src);
     const result = destValue & srcValue;
     this.setValue(dest, result);
-    this.updateFlags(result);
+    // 算术运算不更新标志位，只有 cmp 指令才更新标志位
   }
 
   private push(operand: string): void {

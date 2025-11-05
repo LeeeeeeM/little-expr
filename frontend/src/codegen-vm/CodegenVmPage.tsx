@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import { CfgVisualizer } from './components/CfgVisualizer';
 import { StackVisualizer } from './components/StackVisualizer';
 import { AssemblyVisualizer, type AssemblyLine } from './components/AssemblyVisualizer';
+import { VmExecutor } from './components/VmExecutor';
 import { Compiler } from './lib/compiler';
 import type { ControlFlowGraph } from './lib/cfg-types';
 import type { BasicBlock } from './lib/cfg-types';
@@ -17,6 +18,7 @@ const PRESET_CODE_SAMPLES = [
     value: `int checkGrade() {
     int grade = 0;
     int score = 70;
+    int kkk1 = 0;
     {
       int i = 0;
       score = score + 1;
@@ -46,7 +48,7 @@ const PRESET_CODE_SAMPLES = [
       grade = 3; // C 级
     }
     int k = 9990;
-
+    kkk1 = 1000;
     if (k) {
       int jj = 111;
       {
@@ -95,6 +97,89 @@ const PRESET_CODE_SAMPLES = [
   return a;
 }`
   },
+  { 
+    label: 'For 循环测试 (for-loop-test)', 
+    value: `int loopTest() {
+  int a = 1;
+  int i = 1;
+  for (let i = 0; i < 20; i = i + 1) {
+    let b = 2;
+    a = b + a;
+  }
+  return a;
+}`
+  },
+  { 
+    label: 'While 循环 (while-loop-test)', 
+    value: `int whileTest() {
+  int a = 1;
+  while (a < 10) {
+    int b = 1;
+    a = a + b;
+  }
+  return a;
+}`
+  },
+  { 
+    label: '作用域测试 (test-scope)', 
+    value: `int test() {
+  let i = 0;
+  let j = 10;
+  i = i + 1;
+  if (j > 0) {
+    j = 2;
+  }
+  let i = 100;
+  return i;
+}`
+  },
+  { 
+    label: '复杂测试 (1.txt)', 
+    value: `int checkGrade() {
+    let grade = 0;
+    let score = 70;
+    {
+      let i = 0;
+      score = score + 1;
+    }
+
+    let xxx = 222;
+    
+    if (score >= 80) {
+      let bonusB = 5;
+      grade = 2;
+      let grade = 2;
+      {
+        grade = grade + 20;
+        let c = 100;
+        if (c > 90) {
+          c = 80;
+        }
+      }
+      let cc = 1110;
+      cc = 222;
+    }
+    let k = 9990;
+    {
+      let k1 = 99;
+      k = 10;
+      grade = 2;
+    }
+    if (k > 88) {
+      let jj = 111;
+    }
+    return grade;
+}`
+  },
+  { 
+    label: 'For 循环作用域 2 (test-for-scope-2)', 
+    value: `int test2() {
+  for (let i = 0; i < 5; i = i+1) {
+    // i 在 for 循环作用域中
+  }
+  return i;  // 应该报错，因为 i 不在当前作用域
+}`
+  },
 ];
 
 export interface StackFrame {
@@ -139,6 +224,10 @@ const CodegenVmPage: React.FC = () => {
   const [optimizedAssemblyLines, setOptimizedAssemblyLines] = useState<AssemblyLine[]>([]); // 优化后的汇编代码行
   const [isOptimized, setIsOptimized] = useState(false); // 是否显示优化后的代码
   const assemblyGeneratorRef = useRef<AssemblyGenerator | null>(null); // 汇编生成器实例
+  const [activeTab, setActiveTab] = useState<'cfg' | 'vm'>('cfg'); // Tab 切换状态
+  const [originalAssemblyCode, setOriginalAssemblyCode] = useState<string>(''); // 原始汇编代码字符串
+  const [mergedAssemblyCode, setMergedAssemblyCode] = useState<string>(''); // 合并后的汇编代码字符串
+  const [vmCodeMode, setVmCodeMode] = useState<'original' | 'merged'>('original'); // VM 执行使用的代码模式
   
   // 根据是否有错误消息判断语法是否正确（有错误消息就是语法错误，否则默认正确）
   const isValid = !errorMessage;
@@ -157,12 +246,20 @@ const CodegenVmPage: React.FC = () => {
     setIsStepping(false);
     setActiveBlockId(null);
     setBlockSnapshots(new Map());
+    setPendingSuccessors([]);
+    setDfsStack([]);
     setIsAutoExecuting(false);
+    setIsTraversalCompleted(false);
     setAssemblyLines([]);
     setCurrentAssemblyLineIndex(null);
     setOptimizedAssemblyLines([]);
     setIsOptimized(false);
     assemblyGeneratorRef.current = null;
+    setOriginalAssemblyCode('');
+    setMergedAssemblyCode('');
+    setHighlightedVariable(null);
+    setActiveTab('cfg'); // 切换到 CFG tab
+    // 清除自动执行定时器
     if (autoExecuteIntervalRef.current) {
       clearInterval(autoExecuteIntervalRef.current);
       autoExecuteIntervalRef.current = null;
@@ -196,7 +293,10 @@ const CodegenVmPage: React.FC = () => {
     setOptimizedAssemblyLines([]);
     setIsOptimized(false);
     assemblyGeneratorRef.current = null;
+    setOriginalAssemblyCode('');
+    setMergedAssemblyCode('');
     setHighlightedVariable(null);
+    setActiveTab('cfg'); // 切换到 CFG tab
     // 清除自动执行定时器
     if (autoExecuteIntervalRef.current) {
       clearInterval(autoExecuteIntervalRef.current);
@@ -1295,6 +1395,9 @@ const CodegenVmPage: React.FC = () => {
     setDfsStack([]);
     setIsTraversalCompleted(false);
     setIsAutoExecuting(false);
+    setOriginalAssemblyCode('');
+    setMergedAssemblyCode('');
+    setActiveTab('cfg'); // 切换到 CFG tab
     if (autoExecuteIntervalRef.current) {
       clearInterval(autoExecuteIntervalRef.current);
       autoExecuteIntervalRef.current = null;
@@ -1327,6 +1430,44 @@ const CodegenVmPage: React.FC = () => {
       setIsOptimized(false);
     }
   }, [cfg, assemblyLines, isOptimized]);
+
+  // 生成汇编代码字符串的辅助函数
+  const generateAssemblyCodeStrings = useCallback((lines: AssemblyLine[]) => {
+    // 生成原始代码字符串
+    const originalCode = lines.map(line => line.code).join('\n');
+    
+    // 生成合并后的代码字符串（如果已优化）
+    let mergedCode = '';
+    if (cfg && lines.length > 0) {
+      try {
+        const optimized = optimizeAssembly(lines, cfg);
+        mergedCode = optimized.map(line => line.code).join('\n');
+      } catch (error) {
+        console.error('生成合并代码失败:', error);
+        mergedCode = originalCode; // 如果优化失败，使用原始代码
+      }
+    } else {
+      mergedCode = originalCode;
+    }
+    
+    return { originalCode, mergedCode };
+  }, [cfg]);
+
+  // 当遍历完成时，生成并保存汇编代码字符串
+  React.useEffect(() => {
+    if (isTraversalCompleted && assemblyLines.length > 0) {
+      const { originalCode, mergedCode } = generateAssemblyCodeStrings(assemblyLines);
+      setOriginalAssemblyCode(originalCode);
+      setMergedAssemblyCode(mergedCode);
+    }
+  }, [isTraversalCompleted, assemblyLines, generateAssemblyCodeStrings]);
+
+  // 如果当前在 VM tab 但代码生成未完成，自动切换回 CFG tab
+  React.useEffect(() => {
+    if (activeTab === 'vm' && !isTraversalCompleted) {
+      setActiveTab('cfg');
+    }
+  }, [activeTab, isTraversalCompleted]);
 
   // 自动执行处理
   React.useEffect(() => {
@@ -1400,7 +1541,7 @@ const CodegenVmPage: React.FC = () => {
               disabled={!cfg || (isStepping && !currentBlock) || isTraversalCompleted || isAutoExecuting}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isStepping ? '执行下一步' : '开始遍历基本块'}
+              {isStepping ? '执行下一步' : '开始单步生成代码'}
             </button>
             <button
               onClick={() => {
@@ -1426,7 +1567,7 @@ const CodegenVmPage: React.FC = () => {
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               } disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              {isAutoExecuting ? '停止自动执行' : '自动执行'}
+              {isAutoExecuting ? '停止代码生成' : '自动执行代码生成'}
             </button>
             <button
               onClick={handleReset}
@@ -1489,13 +1630,101 @@ const CodegenVmPage: React.FC = () => {
         </div>
         
         {/* 中间 CFG 展示区域 - 40% */}
-        <div className="w-[40%] px-3 py-6 border-r border-gray-200 flex-shrink-0 overflow-hidden">
-          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="w-[40%] px-3 py-6 border-r border-gray-200 flex-shrink-0 overflow-hidden flex flex-col">
+          <div className="h-full bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+            {/* Tab 切换栏 */}
+            <div className="flex border-b border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setActiveTab('cfg')}
+                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'cfg'
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                CFG
+              </button>
+              <button
+                onClick={() => {
+                  if (isTraversalCompleted) {
+                    setActiveTab('vm');
+                  }
+                }}
+                disabled={!isTraversalCompleted}
+                className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'vm'
+                    ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                VM 执行
+              </button>
+            </div>
+            
+            {/* Tab 内容区域 */}
+            <div className="flex-1 overflow-hidden relative">
+              {/* CFG Tab 内容 - 保持挂载，只切换显示 */}
+              <div className={`absolute inset-0 ${activeTab === 'cfg' ? '' : 'hidden'}`}>
             <CfgVisualizer
               cfg={cfg}
               activeBlockId={activeBlockId}
               visitedBlockIds={visitedBlocks}
             />
+              </div>
+              
+              {/* VM 执行 Tab 内容 - 保持挂载，只切换显示 */}
+              <div className={`absolute inset-0 ${activeTab === 'vm' ? '' : 'hidden'}`}>
+                {isTraversalCompleted && (originalAssemblyCode || mergedAssemblyCode) ? (
+                  <div className="h-full flex flex-col">
+                    {/* 代码模式切换 */}
+                    <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setVmCodeMode('original')}
+                          className={`px-3 py-1 text-sm rounded transition-colors ${
+                            vmCodeMode === 'original'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          原始代码
+                        </button>
+                        <button
+                          onClick={() => setVmCodeMode('merged')}
+                          disabled={!mergedAssemblyCode}
+                          className={`px-3 py-1 text-sm rounded transition-colors ${
+                            vmCodeMode === 'merged'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          合并代码
+                        </button>
+                      </div>
+                    </div>
+                    {/* VM 执行器 */}
+                    <div className="flex-1 overflow-hidden">
+                      <VmExecutor
+                        assemblyCode={vmCodeMode === 'merged' && mergedAssemblyCode ? mergedAssemblyCode : originalAssemblyCode}
+                        isMerged={vmCodeMode === 'merged'}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center bg-gray-50">
+                    <div className="text-center text-gray-500">
+                      <div className="text-4xl mb-4">🚀</div>
+                      <p className="text-lg">VM 执行功能</p>
+                      <p className="text-sm text-gray-400 mt-2">
+                        {!isTraversalCompleted
+                          ? '请先完成代码生成'
+                          : '暂无可执行的汇编代码'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         

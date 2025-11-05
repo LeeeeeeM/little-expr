@@ -23,12 +23,12 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Suspense fallback={<LoadingFallback />}>
-        <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/ast-cfg" element={<CfgPage />} />
+      <Routes>
+        <Route path="/" element={<App />} />
+        <Route path="/ast-cfg" element={<CfgPage />} />
           <Route path="/stack-scope" element={<StackScopePage />} />
           <Route path="/codegen-vm" element={<CodegenVmPage />} />
-        </Routes>
+      </Routes>
       </Suspense>
     </BrowserRouter>
   </StrictMode>,

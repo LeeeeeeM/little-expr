@@ -155,8 +155,6 @@ export function optimizeAssembly(
   if (cfg.entryBlock) {
     processBlock(cfg.entryBlock.id);
   }
-
-  console.log('mergeBlocks', mergeBlocks);
   
   // 处理其他未处理的块（可能有些块没有从入口块可达）
   const allBlockIds = new Set(blockCodeMap.keys());

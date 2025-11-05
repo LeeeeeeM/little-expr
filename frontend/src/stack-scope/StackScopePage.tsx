@@ -1236,7 +1236,7 @@ const StackScopePage: React.FC = () => {
               disabled={!cfg || (isStepping && !currentBlock) || isTraversalCompleted || isAutoExecuting}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isStepping ? '执行下一步' : '开始遍历基本块'}
+              {isStepping ? '展示下一步栈布局' : '开始展示栈布局'}
             </button>
             <button
               onClick={() => {

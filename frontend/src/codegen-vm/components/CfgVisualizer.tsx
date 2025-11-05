@@ -129,6 +129,11 @@ function statementToSourceCode(stmt: Statement): string {
 
 // 使用 Dagre 进行自动布局
 function getLayoutedNodes(nodes: Node[], edges: Edge[], direction: 'TB' | 'LR' = 'TB'): Node[] {
+  // 如果节点或边为空，直接返回
+  if (nodes.length === 0) {
+    return nodes;
+  }
+
   const dagreGraph = new dagre.graphlib.Graph();
   (dagreGraph as any).setDefaultEdgeLabel(() => ({}));
   
@@ -141,28 +146,61 @@ function getLayoutedNodes(nodes: Node[], edges: Edge[], direction: 'TB' | 'LR' =
 
   // 添加节点（需要提供宽度和高度）
   nodes.forEach((node) => {
+    const width = (node.style?.width as number) || 200;
+    const height = (node.style?.minHeight as number) || 150;
+    // 确保宽度和高度是有效数字
     dagreGraph.setNode(node.id, { 
-      width: node.style?.width as number || 200,
-      height: node.style?.minHeight as number || 150
+      width: isNaN(width) || width <= 0 ? 200 : width,
+      height: isNaN(height) || height <= 0 ? 150 : height
     });
   });
 
   // 添加边
   edges.forEach((edge) => {
+    // 确保源节点和目标节点都存在
+    if (edge.source && edge.target) {
     dagreGraph.setEdge(edge.source, edge.target);
+    }
   });
 
   // 执行布局计算
+  try {
   dagre.layout(dagreGraph);
+  } catch (error) {
+    console.error('Dagre layout calculation failed:', error);
+    // 如果布局计算失败，返回带默认位置的节点
+    return nodes.map((node) => ({
+      ...node,
+      position: {
+        x: 0,
+        y: 0,
+      },
+    }));
+  }
 
-  // 更新节点位置
+  // 更新节点位置，添加防御性检查避免 NaN
   return nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id) as any;
+    const nodeWidth = (node.style?.width as number) || 200;
+    const nodeHeight = (node.style?.minHeight as number) || 150;
+    
+    // 检查 nodeWithPosition 是否存在，以及 x 和 y 是否为有效数字
+    const x = nodeWithPosition?.x ?? 0;
+    const y = nodeWithPosition?.y ?? 0;
+    
+    // 确保 x 和 y 是有效数字，不是 NaN 或 Infinity
+    const finalX = (typeof x === 'number' && !isNaN(x) && isFinite(x))
+      ? x - nodeWidth / 2
+      : 0;
+    const finalY = (typeof y === 'number' && !isNaN(y) && isFinite(y))
+      ? y - nodeHeight / 2
+      : 0;
+    
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - ((node.style?.width as number || 200) / 2), // 居中
-        y: nodeWithPosition.y - ((node.style?.minHeight as number || 150) / 2), // 居中
+        x: finalX,
+        y: finalY,
       },
     };
   });
@@ -419,19 +457,29 @@ const CfgVisualizerInner: React.FC<CfgVisualizerProps> = ({ cfg, activeBlockId, 
       layoutedNodes.forEach(node => {
         const nodeWidth = (node.style?.width as number) || 200;
         const nodeHeight = (node.style?.minHeight as number) || 150;
-        const x = node.position.x;
-        const y = node.position.y;
+        const x = node.position?.x ?? 0;
+        const y = node.position?.y ?? 0;
         
+        // 确保 x 和 y 是有效数字
+        if (typeof x === 'number' && !isNaN(x) && isFinite(x) &&
+            typeof y === 'number' && !isNaN(y) && isFinite(y)) {
         minX = Math.min(minX, x);
         minY = Math.min(minY, y);
         maxX = Math.max(maxX, x + nodeWidth);
         maxY = Math.max(maxY, y + nodeHeight);
+        }
       });
+      
+      // 确保边界值是有效数字
+      if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+        return;
+      }
       
       const graphWidth = maxX - minX;
       const graphHeight = maxY - minY;
       
-      if (graphWidth > 0 && graphHeight > 0) {
+      // 确保宽度和高度是有效数字
+      if (graphWidth > 0 && graphHeight > 0 && isFinite(graphWidth) && isFinite(graphHeight)) {
         const padding = 50;
         const viewWidth = container.offsetWidth - (padding * 2);
         const viewHeight = container.offsetHeight - (padding * 2);

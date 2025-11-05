@@ -76,3 +76,10 @@ jspm_packages/
 
 # DynamoDB Local files
 .dynamodb/
+
+# Manim generated files
+manim/media/
+manim/__pycache__/
+manim/.venv/
+*.pyc
+__pycache__/

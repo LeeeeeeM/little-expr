@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigation } from '../contexts/NavigationContext';
 
 interface MenuItem {
   path: string;
@@ -17,6 +18,8 @@ const menuItems: MenuItem[] = [
 export const Menu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { setIsNavigating } = useNavigation();
 
   // 根据当前路径更新 document.title
   useEffect(() => {
@@ -61,14 +64,20 @@ export const Menu: React.FC = () => {
           <div className="fixed top-20 left-4 z-50 bg-white rounded-md shadow-xl border border-gray-200 min-w-[200px] overflow-hidden">
             <div className="py-2">
               {menuItems.map((item) => (
-                <Link
+                <button
                   key={item.path}
-                  to={item.path}
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 text-gray-700 hover:bg-gray-100 hover:text-blue-600 transition-colors"
+                  onClick={() => {
+                    if (item.path !== location.pathname) {
+                      // 点击时立即显示 loading
+                      setIsNavigating(true)
+                    }
+                    setIsOpen(false)
+                    navigate(item.path)
+                  }}
+                  className="block w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 hover:text-blue-600 transition-colors"
                 >
                   {item.label}
-                </Link>
+                </button>
               ))}
             </div>
           </div>

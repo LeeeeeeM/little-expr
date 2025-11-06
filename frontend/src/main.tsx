@@ -5,6 +5,7 @@ import './index.css'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
 import { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
+import { Analytics } from '@vercel/analytics/react'
 
 // 配置 monaco-editor 从本地加载，而不是从 CDN
 loader.config({ monaco })
@@ -76,6 +77,7 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <NavigationProvider>
         <RouterContent />
+        <Analytics />
       </NavigationProvider>
     </BrowserRouter>
   </StrictMode>,

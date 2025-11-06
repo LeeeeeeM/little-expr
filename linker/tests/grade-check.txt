@@ -1,3 +1,7 @@
+int main() {
+  return checkGrade();
+}
+
 int checkGrade() {
     int grade = 0;
     int score = 70;

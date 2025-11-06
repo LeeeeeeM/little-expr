@@ -7,8 +7,7 @@ int main() {
     result = malloc();
     if (result > 0) {
       free();
-    } else {
-      print();
     }
+    result = result + print();
     return result;
 }

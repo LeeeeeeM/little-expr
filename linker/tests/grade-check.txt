@@ -1,0 +1,48 @@
+int checkGrade() {
+    int grade = 0;
+    int score = 70;
+    int kkk1 = 0;
+    {
+      int i = 0;
+      score = score + 1;
+      if (i > 123) return 123;
+    }
+    
+    if (score >= 90) {
+        grade = 1;  // A级
+        int bonusA = 10;
+        {
+          grade = 10;
+        }
+        grade = 111;
+    } else if (score >= 80) {
+      int bonusB = 5;
+      grade = 2;
+      int grade = 2;  // B级
+      {
+        grade = grade + 20;
+        int c = 100;
+      }
+      int cc = 1110;
+      cc = 222;
+    } else if (score >= 60) {
+      grade = 3; // C 级
+    }
+    int k = 9990;
+    kkk1 = 1000;
+    if (k) {
+      int jj = 111;
+      {
+        int j = 1111;
+        if (j > 0) {
+          j = 222;
+        }
+        int j11= 1231;
+        {
+          int xx = 1;
+        }
+      }
+      int j111 = 123123;
+    }
+    return grade;
+}

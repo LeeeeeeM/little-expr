@@ -1,0 +1,14 @@
+int malloc();
+int free();
+int print();
+
+int main() {
+    int result = 0;
+    result = malloc();
+    if (result > 0) {
+      free();
+    } else {
+      print();
+    }
+    return result;
+}

@@ -1,0 +1,16 @@
+int main() {
+    int result = 42;
+    result = add();
+    return result;
+}
+
+int add() {
+    int a = 13;
+    a  = a + dec();
+    return a;
+}
+
+int dec() {
+    int a = 33;
+    return a;
+}

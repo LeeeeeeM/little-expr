@@ -1,0 +1,15 @@
+
+int c();
+
+int main() {
+    int result = 42;
+    result = add();
+
+    result = result + c();
+    return result;
+}
+
+int add() {
+    int a = 12;
+    return a;
+}

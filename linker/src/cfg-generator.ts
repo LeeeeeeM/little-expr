@@ -89,6 +89,14 @@ export class CFGGenerator {
     const cfgs: ControlFlowGraph[] = [];
     for (const stmt of program.statements) {
       if (stmt.type === StatementType.FUNCTION_DECLARATION) {
+        const funcDecl = stmt as FunctionDeclaration;
+        // 只生成有函数体的函数的 CFG（函数声明没有函数体，跳过）
+        // 使用 isDeclaration 标记来区分函数声明和函数定义
+        if (funcDecl.isDeclaration) {
+          // 函数声明（只有声明，没有定义），跳过 CFG 生成
+          continue;
+        }
+        // 函数定义（包括空函数定义），生成 CFG
         cfgs.push(this.generateFunctionCFG(stmt));
       }
     }
@@ -471,9 +479,9 @@ export class CFGGenerator {
     // 处理 then 分支：可能是 BlockStatement、IfStatement 或单个语句
     if (ifStmt.thenBranch.type === StatementType.BLOCK_STATEMENT) {
       const result = this.generateBlockCFG(
-      ifStmt.thenBranch as BlockStatement,
-      thenEntryBlock
-    );
+        ifStmt.thenBranch as BlockStatement,
+        thenEntryBlock
+      );
       thenBlocks = result.blocks;
       thenExit = result.exit;
     } else if (ifStmt.thenBranch.type === StatementType.IF_STATEMENT) {

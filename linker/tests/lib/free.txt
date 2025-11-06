@@ -1,0 +1,9 @@
+int free() {
+  int b = 2500;
+  if (b > 0) {
+    b = b - 1;
+  } else {
+    b = b + 1;
+  }
+  return b;
+}

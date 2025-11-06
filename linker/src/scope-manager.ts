@@ -112,38 +112,6 @@ export class ScopeManager {
   }
 
   /**
-   * 获取变量信息（包括 offset 和 init 状态）
-   * 只返回已初始化（init: true）的变量
-   */
-  getVariableInfo(name: string): { offset: number; init: boolean } | null {
-    // 首先检查for循环变量
-    if (this.inForLoop && this.forLoopVariables.has(name)) {
-      return { offset: this.forLoopVariables.get(name)!, init: true };
-    }
-    
-    // 从内层到外层查找，只匹配 init: true 的变量
-    for (let i = this.scopes.length - 1; i >= 0; i--) {
-      const scope = this.scopes[i];
-      if (scope && scope.has(name)) {
-        const info = scope.get(name)!;
-        if (info.init) {
-          return info;
-        }
-        // 如果当前作用域的变量未初始化，继续查找外层（作用域遮蔽规则）
-      }
-    }
-    
-    // 检查是否是函数参数
-    const paramIndex = this.functionParameters.indexOf(name);
-    if (paramIndex !== -1) {
-      return { offset: paramIndex + 2, init: true }; // 参数从 ebp+2 开始
-    }
-    
-    return null;
-  }
-  
-  
-  /**
    * 查找变量（兼容旧接口）
    */
   getVariable(name: string): number | null {
@@ -192,31 +160,6 @@ export class ScopeManager {
     return this.scopes.length > 0 ? this.scopes[this.scopes.length - 1]! : null;
   }
   
-  /**
-   * 查找变量（从外层到内层，用于 return 语句查找最外层变量）
-   * 只返回已初始化（init: true）的变量
-   */
-  getFunctionLevelVariable(name: string): number | null {
-    // 从外层到内层查找，只匹配 init: true 的变量
-    for (let i = 0; i < this.scopes.length; i++) {
-      const scope = this.scopes[i];
-      if (scope && scope.has(name)) {
-        const info = scope.get(name)!;
-        if (info.init) {
-          return info.offset;
-        }
-        // 如果当前作用域的变量未初始化，继续查找下一层
-      }
-    }
-    
-    // 如果都没找到，检查是否是函数参数
-    const paramIndex = this.functionParameters.indexOf(name);
-    if (paramIndex !== -1) {
-      return paramIndex + 2; // 参数从 ebp+2 开始（跳过返回地址）
-    }
-    
-    return null;
-  }
 
   /**
    * 获取所有变量信息（只返回已初始化的变量）

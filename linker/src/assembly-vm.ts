@@ -154,10 +154,20 @@ export class AssemblyVM {
         this.sub(operands[0]!, operands[1]!);
         break;
       case 'mul':
-        this.mul(operands[0]!);
+        if (operands.length === 2) {
+          this.mul(operands[0]!, operands[1]!);
+        } else {
+          // 向后兼容：单个操作数的情况
+          this.mul('eax', operands[0]!);
+        }
         break;
       case 'div':
-        this.div(operands[0]!);
+        if (operands.length === 2) {
+          this.div(operands[0]!, operands[1]!);
+        } else {
+          // 向后兼容：单个操作数的情况
+          this.div('eax', operands[0]!);
+        }
         break;
       case 'cmp':
         this.cmp(operands[0]!, operands[1]!);
@@ -249,22 +259,22 @@ export class AssemblyVM {
     this.updateFlags(result);
   }
 
-  private mul(operand: string): void {
-    const value = this.getValue(operand);
-    const ax = this.state.registers.get('ax')!;
-    const result = ax * value;
-    this.state.registers.set('ax', result);
+  private mul(dest: string, src: string): void {
+    const destValue = this.getValue(dest);
+    const srcValue = this.getValue(src);
+    const result = destValue * srcValue;
+    this.setValue(dest, result);
     this.updateFlags(result);
   }
 
-  private div(operand: string): void {
-    const value = this.getValue(operand);
-    if (value === 0) {
+  private div(dest: string, src: string): void {
+    const destValue = this.getValue(dest);
+    const srcValue = this.getValue(src);
+    if (srcValue === 0) {
       throw new Error('Division by zero');
     }
-    const ax = this.state.registers.get('ax')!;
-    const result = Math.floor(ax / value);
-    this.state.registers.set('ax', result);
+    const result = Math.floor(destValue / srcValue);
+    this.setValue(dest, result);
     this.updateFlags(result);
   }
 

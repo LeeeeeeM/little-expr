@@ -1,0 +1,9 @@
+int add(int a, int b) {
+    return a;  // 返回参数 a（Identifier，不是表达式）
+}
+
+int main() {
+    int result = add(10, 20);
+    return result;
+}
+

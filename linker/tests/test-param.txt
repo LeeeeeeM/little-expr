@@ -1,0 +1,20 @@
+int add(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    int result = add(10, 20);
+    int b = 2;
+    for (let i = 0; i < 6; i = i + 1) {
+        if (i > 1) break;
+        if (i > 2) {
+            return i;
+        }
+    }
+    int i = 100;
+    if (result > 0) {
+        return i;
+    }
+    return result;
+}
+

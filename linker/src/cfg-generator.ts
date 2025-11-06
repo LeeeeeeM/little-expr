@@ -48,6 +48,7 @@ export interface ControlFlowGraph {
   exitBlock?: BasicBlock;
   blocks: BasicBlock[];
   edges: { from: string; to: string }[];
+  parameters?: Array<{ name: string; type: any }>; // 函数参数列表
 }
 
 export interface CFGAnalysis {
@@ -301,6 +302,7 @@ export class CFGGenerator {
       exitBlock: this.currentFunctionExitBlock,
       blocks: optimizedResult.blocks,
       edges: optimizedResult.edges,
+      parameters: funcDecl.parameters, // 保存函数参数信息
     };
   }
 

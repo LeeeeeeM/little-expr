@@ -28,7 +28,18 @@ export class AssemblyGenerator {
     }
     
     this.currentFunctionName = cfg.functionName;
+    
+    // 设置函数参数（如果存在）
+    if (cfg.parameters && cfg.parameters.length > 0) {
+      const paramNames = cfg.parameters.map(p => p.name);
+      this.scopeManager.setFunctionParameters(paramNames);
+    }
+    
     this.lines.push(`; Function: ${cfg.functionName}`);
+    if (cfg.parameters && cfg.parameters.length > 0) {
+      const paramList = cfg.parameters.map(p => `${p.type} ${p.name}`).join(', ');
+      this.lines.push(`; Parameters: ${paramList}`);
+    }
     this.lines.push(`${cfg.functionName}:`);
     
     // 函数入口：保存旧的 ebp，设置新的 ebp = esp
@@ -377,7 +388,7 @@ export class AssemblyGenerator {
     if (ret.value) {
       if (ret.value.type === 'Identifier') {
         const varName = ret.value.name;
-        const offset = this.scopeManager.getFunctionLevelVariable(varName);
+        const offset = this.scopeManager.getVariableOffset(varName);
         if (offset !== null) {
           this.lines.push(`  li ${offset}              ; 返回变量 ${varName}`);
         } else {
@@ -563,9 +574,9 @@ export class AssemblyGenerator {
       case '-':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nsub eax, ebx`;
       case '*':
-        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nimul eax, ebx`;
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmul eax, ebx`;
       case '/':
-        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nidiv ebx`;
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\ndiv eax, ebx`;
       case '%':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmod eax, ebx`;
       case '==':
@@ -587,11 +598,33 @@ export class AssemblyGenerator {
 
   /**
    * 生成函数调用
+   * 按照 C 调用约定：参数从右到左压栈，调用者清理栈
    */
   private generateFunctionCall(funcCall: any): string {
     const funcName = funcCall.callee.name;
-    // 生成 call 指令，函数名会在链接时解析
-    return `call ${funcName}`;
+    const args = funcCall.arguments || [];
+    
+    // 如果没有参数，直接调用
+    if (args.length === 0) {
+      return `call ${funcName}`;
+    }
+    
+    // 生成参数压栈代码（从右到左）
+    const pushInstructions: string[] = [];
+    for (let i = args.length - 1; i >= 0; i--) {
+      const argAsm = this.generateExpression(args[i]);
+      if (argAsm) {
+        pushInstructions.push(argAsm);
+        pushInstructions.push('push eax');
+      }
+    }
+    
+    // 生成调用和栈清理代码
+    const callInstruction = `call ${funcName}`;
+    const cleanupInstruction = `add esp, ${args.length}  ; 清理 ${args.length} 个参数`;
+    
+    // 组合所有指令
+    return pushInstructions.join('\n') + '\n' + callInstruction + '\n' + cleanupInstruction;
   }
 
   /**

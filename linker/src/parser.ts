@@ -351,7 +351,33 @@ export class StatementParser {
       // 恢复位置
       this.lexer.setPosition(savedPosition);
       
+      // 创建函数作用域（函数体的作用域）
+      const functionScope: Scope = {
+        variables: new Map(),
+        functions: new Map(),
+        parent: this.context.currentScope
+      };
+      
+      // 将函数参数注册到函数作用域（作为已初始化的变量）
+      // 参数通过栈访问，不需要在作用域中分配空间，但需要标记为已定义
+      for (const param of parameters) {
+        functionScope.variables.set(param.name, {
+          name: param.name,
+          type: param.type,
+          value: 0,
+          isInitialized: true // 参数被视为已初始化
+        });
+      }
+      
+      // 切换到函数作用域
+      const oldScope = this.context.currentScope;
+      this.context.currentScope = functionScope;
+      
+      // 解析函数体（此时参数已经在作用域中）
       const body = this.parseBlockStatement();
+      
+      // 恢复原作用域
+      this.context.currentScope = oldScope;
 
       // 添加到当前作用域
       this.context.currentScope.functions.set(name, {

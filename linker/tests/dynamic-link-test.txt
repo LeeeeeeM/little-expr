@@ -2,6 +2,10 @@ int malloc();
 int free();
 int print();
 
+int add() {
+  return 20000;
+}
+
 int main() {
     int result = 0;
     result = malloc();
@@ -9,5 +13,6 @@ int main() {
       free();
     }
     result = result + print();
+    result = result + add();
     return result;
 }

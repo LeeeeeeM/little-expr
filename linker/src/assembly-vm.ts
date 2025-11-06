@@ -332,7 +332,7 @@ export class AssemblyVM {
       this.state.stack.delete(sp);
     } else {
       // 没有调用栈，说明是 main 函数返回，结束程序
-      this.state.halted = true;
+    this.state.halted = true;
     }
   }
   

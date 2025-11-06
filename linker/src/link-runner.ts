@@ -239,14 +239,25 @@ export class DLLRunner {
         };
       }
 
-      // 处理第一个函数（主函数）
-      const asmResult = assemblyResults[0]!;
-      console.log(`\n主函数: ${asmResult.functionName}`);
+      // 查找 main 函数
+      const mainFunction = assemblyResults.find(r => r.functionName === 'main');
+      if (!mainFunction) {
+        return {
+          success: false,
+          errorType: 'compile',
+          output: '未找到 main 函数',
+          errors: ['程序必须包含 main 函数作为入口点'],
+        };
+      }
+
+      // 合并所有函数的汇编代码（不只是 main，包含所有主程序中的函数）
+      console.log(`\n主函数: ${mainFunction.functionName}`);
       console.log('\n原始汇编代码:');
-      console.log(asmResult.assembly);
+      console.log(mainFunction.assembly);
 
       // 3. 处理库函数（静态链接）
-      let mergedAssembly = asmResult.assembly;
+      // 合并所有主程序函数的汇编代码
+      let mergedAssembly = assemblyResults.map(r => r.assembly).join('\n\n');
       
       // 静态链接：直接合并库函数代码到主程序汇编中
       if (libraryFunctions && libraryFunctions.size > 0) {
@@ -282,11 +293,25 @@ export class DLLRunner {
         console.log('\n✅ 静态链接完成：所有符号都已解析');
       }
 
-      // 6. 加载链接后的代码（静态链接：所有代码已经合并并链接完成）
-      console.log('\n💾 加载链接后的代码...');
-      this.linkedExecutor.loadLinkedCode(linkResult.linkedCode);
+      // 6. 查找 main 函数的入口地址
+      const mainEntryAddress = linkResult.labelMap.get('main');
+      if (mainEntryAddress === undefined) {
+        return {
+          success: false,
+          errorType: 'link',
+          output: '链接后未找到 main 函数的入口地址',
+          errors: ['链接后未找到 main 函数的入口地址'],
+          assembly: mergedAssembly,
+          linkedAssembly: linkResult.linkedCode,
+          labelMap: linkResult.labelMap,
+        };
+      }
 
-      // 7. 执行链接后的代码
+      // 7. 加载链接后的代码（静态链接：所有代码已经合并并链接完成）
+      console.log('\n💾 加载链接后的代码...');
+      this.linkedExecutor.loadLinkedCode(linkResult.linkedCode, mainEntryAddress);
+
+      // 8. 执行链接后的代码
       console.log('\n▶️  执行链接后的代码...');
       const linkedVmResult = this.linkedExecutor.run();
 
@@ -296,7 +321,7 @@ export class DLLRunner {
           errorType: 'runtime',
           output: linkedVmResult.output,
           errors: [linkedVmResult.output],
-          assembly: asmResult.assembly,
+          assembly: mergedAssembly,
           linkedAssembly: linkResult.linkedCode,
           labelMap: linkResult.labelMap,
         };
@@ -317,7 +342,7 @@ export class DLLRunner {
         success: true,
         output: `返回值: ${linkedVmResult.state.registers.get('ax')}`,
         errors: [],
-        assembly: asmResult.assembly,
+        assembly: mergedAssembly,
         linkedAssembly: linkResult.linkedCode,
         labelMap: linkResult.labelMap,
         linkedVmResult,

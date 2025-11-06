@@ -136,20 +136,20 @@ export class SimpleLinker {
 
       // 替换标签引用为地址
       for (const label of inst.labelReferences) {
-        const targetAddress = this.labels.get(label);
-        if (targetAddress !== undefined) {
-          const labelRegex = new RegExp(`\\b${this.escapeRegex(label)}\\b`, 'g');
-          linkedLine = linkedLine.replace(labelRegex, targetAddress.toString());
-        } else {
-          // 未定义的标签：如果是 call 指令，保留原始函数名（可能是函数声明）
-          // 否则替换为 ?
-          if (inst.opcode === 'call') {
-            // call 指令中的未定义标签保留为原始函数名（可能是函数声明）
-            // 不进行替换，保持原样
-          } else {
-            // 其他指令中的未定义标签替换为 ?
+          const targetAddress = this.labels.get(label);
+          if (targetAddress !== undefined) {
             const labelRegex = new RegExp(`\\b${this.escapeRegex(label)}\\b`, 'g');
-            linkedLine = linkedLine.replace(labelRegex, '?');
+            linkedLine = linkedLine.replace(labelRegex, targetAddress.toString());
+          } else {
+            // 未定义的标签：如果是 call 指令，保留原始函数名（可能是函数声明）
+            // 否则替换为 ?
+            if (inst.opcode === 'call') {
+            // call 指令中的未定义标签保留为原始函数名（可能是函数声明）
+              // 不进行替换，保持原样
+            } else {
+              // 其他指令中的未定义标签替换为 ?
+              const labelRegex = new RegExp(`\\b${this.escapeRegex(label)}\\b`, 'g');
+              linkedLine = linkedLine.replace(labelRegex, '?');
           }
         }
       }

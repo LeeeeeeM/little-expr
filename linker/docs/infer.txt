@@ -1,0 +1,43 @@
+我们现在继续哈。
+
+你现在执行 bun src/link-runner.ts tests/dynamic-link-test.txt tests/lib/ 是一个静态链接对吧。
+
+我现在希望你创建一个新的入口 dynamic-link-runner.ts
+
+执行 bun src/dynamic-link-runner.ts tests/dynamic-link-test.txt tests/lib/
+
+dynamic-link-runner.ts内的逻辑是这样的。
+1、先分析 tests/lib/ 的库文件，每个文件都独自生成汇编代码
+2、由于是多个库文件，每个库文件都加载到各自的代码段，每个段地址为 1000*N
+3、由于是动态链接，需要通过一个  libMap 记录，在执行 main 逻辑时，由于 call 之后后面不是数字，则查找  libMap
+libMap 的结构是这样的 new Map<string, Info>(), string 是函数名， Info 的结构是这样的  
+{
+    segmentIndex: 1000 * N, (对应上面的段地址)
+    codes: string[], (对应解析之后的代码)
+}
+
+Map 的内容是动态生成的，最开始的时候 Map 肯定是空，后续如果再访问，可以直接从 Map 里面获取。
+
+
+
+目前一个例子是这样的
+
+int malloc();
+int free();
+int print();
+
+int add() {
+  return 1;
+}
+
+int main() {
+    int result = 0;
+    free();   汇编调用 call， 后面参数是 free， 由于最新调先 free，且 free 并没有实现，从 map 里获取，map 里没有，则从库里动态链接， free 的段地址为 1000， 存储到map
+    print();   // print 并没有在当前代码里实现，从 map 里获取，map 里没有，则从库里动态链接， print 的段地址为 2000， 存储到 map
+    malloc();  // malloc 并没有在当前代码里实现，从 map 里获取，map 里没有，则从库里动态链接， print 的段地址为 3000， 存储到map
+    malloc();   // malloc 并没有在当前代码里实现，从 map 里获取，map 里有，直接获取
+    malloc();   // malloc 并没有在当前代码里实现，从 map 里获取，map 里有，直接获取
+    print();  // print 并没有在当前代码里实现，从 map 里获取，map 里有，直接获取
+    add();  // 直接跳到当前段的地址，因为汇编是 call 数字。
+    return result;
+}

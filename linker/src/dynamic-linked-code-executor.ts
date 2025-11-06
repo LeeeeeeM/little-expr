@@ -1,38 +1,33 @@
 /**
- * 链接后代码执行器（Linked Code Executor）
- * 用于执行经过 linker 处理后的代码
+ * 动态链接代码执行器（Dynamic Linked Code Executor）
+ * 支持多段代码和动态链接
  * 
  * 特点：
- * - 代码已经移除了标签，使用地址跳转
- * - 每行代码有地址标注 [x]
- * - 跳转指令使用数字地址而不是标签
+ * - 支持多个代码段（每个库文件一个段）
+ * - 段地址：1000 * N（N >= 1）
+ * - 主程序段：段0（地址 0-999）
+ * - 动态加载函数到 libMap
+ * - 支持跨段调用和返回
  */
 
-export interface LinkedExecState {
-  registers: Map<string, number>;
-  memory: Map<number, number>;
-  stack: Map<number, number>;
-  flags: {
-    greater: boolean;
-    equal: boolean;
-    less: boolean;
-  };
-  pc: number; // 程序计数器（当前执行的地址）
-  halted: boolean;
-  cycles: number;
+import type { LinkedExecState, LinkedInstruction } from './linked-code-executor';
+
+export interface LibraryInfo {
+  segmentIndex: number; // 段地址（1000 * N）
+  codes: string[];      // 解析后的代码（链接后的代码）
+  labelMap: Map<string, number>; // 标签到地址的映射（相对于段起始地址）
 }
 
-export interface LinkedInstruction {
-  address: number; // 指令地址
-  opcode: string;
-  operands: string[];
-  originalLine: string; // 原始代码行（用于显示）
+export interface DynamicLinkedExecState extends LinkedExecState {
+  currentSegment: number; // 当前执行的段索引（0 = 主程序，1+ = 库函数段）
 }
 
-export class LinkedCodeExecutor {
-  private state: LinkedExecState;
-  private instructions: LinkedInstruction[] = [];
-  private addressToIndex: Map<number, number> = new Map(); // 地址到指令索引的映射
+export class DynamicLinkedCodeExecutor {
+  private state: DynamicLinkedExecState;
+  private segments: Map<number, LinkedInstruction[]> = new Map(); // 段索引 -> 指令列表
+  private segmentAddressToIndex: Map<number, Map<number, number>> = new Map(); // 段索引 -> (地址 -> 指令索引)
+  private libMap: Map<string, LibraryInfo> = new Map(); // 函数名 -> 库信息
+  private nextSegmentIndex: number = 1; // 下一个可用的段索引（从1开始，对应段地址1000）
 
   constructor() {
     this.state = {
@@ -48,19 +43,32 @@ export class LinkedCodeExecutor {
       },
       pc: 0,
       halted: false,
-      cycles: 0
+      cycles: 0,
+      currentSegment: 0 // 初始在主程序段
     };
   }
 
   /**
-   * 加载链接后的代码
-   * @param linkedCode 链接后的代码（包含地址标注）
-   * @param entryAddress 入口地址（可选，如果提供则从该地址开始执行，否则从第一条指令开始）
+   * 加载主程序代码（段0）
+   * @param linkedCode 链接后的代码（地址是相对地址，从0开始）
+   * @param mainEntryAddress main 函数的入口地址（可选，如果提供则从该地址开始执行）
    */
-  loadLinkedCode(linkedCode: string, entryAddress?: number): void {
-    this.instructions = [];
-    this.addressToIndex.clear();
-    this.resetState();
+  loadMainProgram(linkedCode: string, mainEntryAddress?: number): void {
+    this.loadSegment(0, linkedCode, false); // 主程序地址是相对地址
+    this.state.currentSegment = 0;
+    // 如果提供了 main 入口地址，使用它；否则从地址 0 开始
+    this.state.pc = mainEntryAddress !== undefined ? mainEntryAddress : 0;
+  }
+
+  /**
+   * 加载代码到指定段
+   * @param segmentIndex 段索引（0 = 主程序，1+ = 库函数）
+   * @param linkedCode 链接后的代码（地址可以是相对地址或绝对地址）
+   * @param addressesAreAbsolute 地址是否已经是绝对地址（默认 false，表示相对地址）
+   */
+  loadSegment(segmentIndex: number, linkedCode: string, addressesAreAbsolute: boolean = false): void {
+    const instructions: LinkedInstruction[] = [];
+    const addressToIndex = new Map<number, number>();
 
     const lines = linkedCode.split('\n');
     let instructionIndex = 0;
@@ -79,7 +87,7 @@ export class LinkedCodeExecutor {
         continue;
       }
 
-      const address = parseInt(addressMatch[1]!, 10);
+      const addressInCode = parseInt(addressMatch[1]!, 10);
       const instructionPart = addressMatch[2]!.trim();
 
       // 移除行内注释
@@ -97,36 +105,54 @@ export class LinkedCodeExecutor {
       const opcode = parts[0]!;
       const operands = parts.slice(1).map(op => op.replace(',', '').trim()).filter(op => op);
 
-      this.instructions.push({
-        address,
+      // 计算绝对地址
+      // 如果地址已经是绝对地址，直接使用；否则加上段地址
+      const absoluteAddress = addressesAreAbsolute 
+        ? addressInCode 
+        : segmentIndex * 1000 + addressInCode;
+
+      instructions.push({
+        address: absoluteAddress,
         opcode,
         operands,
         originalLine: line
       });
 
       // 建立地址到索引的映射
-      this.addressToIndex.set(address, instructionIndex);
+      addressToIndex.set(absoluteAddress, instructionIndex);
+      
       instructionIndex++;
     }
 
-    // 如果提供了入口地址，设置 PC 为该地址
-    if (entryAddress !== undefined) {
-      // 验证入口地址是否存在
-      if (this.addressToIndex.has(entryAddress)) {
-        this.state.pc = entryAddress;
-      } else {
-        // 如果入口地址不存在，使用第一条指令的地址
-        if (this.instructions.length > 0) {
-          this.state.pc = this.instructions[0]!.address;
-        }
-      }
-    }
+    this.segments.set(segmentIndex, instructions);
+    this.segmentAddressToIndex.set(segmentIndex, addressToIndex);
+  }
+
+  /**
+   * 注册库函数到 libMap
+   */
+  registerLibraryFunction(functionName: string, info: LibraryInfo): void {
+    this.libMap.set(functionName, info);
+  }
+
+  /**
+   * 获取库函数信息
+   */
+  getLibraryFunction(functionName: string): LibraryInfo | undefined {
+    return this.libMap.get(functionName);
+  }
+
+  /**
+   * 获取下一个可用的段索引
+   */
+  getNextSegmentIndex(): number {
+    return this.nextSegmentIndex++;
   }
 
   /**
    * 单步执行
    */
-  step(): { success: boolean; output: string; state: LinkedExecState; currentAddress: number | null } {
+  step(): { success: boolean; output: string; state: DynamicLinkedExecState; currentAddress: number | null } {
     if (this.state.halted || this.state.pc < 0) {
       return {
         success: true,
@@ -136,32 +162,66 @@ export class LinkedCodeExecutor {
       };
     }
 
+    // 计算当前段索引
+    const segmentIndex = Math.floor(this.state.pc / 1000);
+    const relativeAddress = this.state.pc % 1000;
+
+    // 获取当前段的指令列表
+    const instructions = this.segments.get(segmentIndex);
+    if (!instructions) {
+      return {
+        success: false,
+        output: `找不到段 ${segmentIndex} 的代码`,
+        state: this.state,
+        currentAddress: null
+      };
+    }
+
+    // 获取地址到索引的映射
+    const addressToIndex = this.segmentAddressToIndex.get(segmentIndex);
+    if (!addressToIndex) {
+      return {
+        success: false,
+        output: `找不到段 ${segmentIndex} 的地址映射`,
+        state: this.state,
+        currentAddress: null
+      };
+    }
+
     // 找到当前地址对应的指令索引
-    const instructionIndex = this.addressToIndex.get(this.state.pc);
+    const instructionIndex = addressToIndex.get(this.state.pc);
     
     if (instructionIndex === undefined) {
       return {
         success: false,
-        output: `找不到地址 ${this.state.pc} 的指令`,
+        output: `找不到地址 ${this.state.pc} (段 ${segmentIndex}, 偏移 ${relativeAddress}) 的指令`,
         state: this.state,
         currentAddress: null
       };
     }
 
     try {
-      const instruction = this.instructions[instructionIndex]!;
+      const instruction = instructions[instructionIndex]!;
       const oldPc = this.state.pc;
+      const oldSegment = this.state.currentSegment;
+      
       
       this.executeInstruction(instruction);
       this.state.cycles++;
 
+      // 更新当前段（如果指令改变了 PC）
+      this.state.currentSegment = Math.floor(this.state.pc / 1000);
+
       // 如果 pc 没有改变（没有跳转），则递增到下一个地址
-      if (!this.state.halted && this.state.pc === oldPc) {
+      if (!this.state.halted && this.state.pc === oldPc && this.state.currentSegment === oldSegment) {
         // 找到下一个指令的地址
         const nextIndex = instructionIndex + 1;
-        if (nextIndex < this.instructions.length) {
-          this.state.pc = this.instructions[nextIndex]!.address;
+        if (nextIndex < instructions.length) {
+          const nextAddress = instructions[nextIndex]!.address;
+          this.state.pc = nextAddress;
+          this.state.currentSegment = Math.floor(this.state.pc / 1000);
         } else {
+          // 没有下一条指令，程序应该结束
           this.state.halted = true;
         }
       }
@@ -185,7 +245,7 @@ export class LinkedCodeExecutor {
   /**
    * 完整执行
    */
-  run(): { success: boolean; output: string; state: LinkedExecState } {
+  run(): { success: boolean; output: string; state: DynamicLinkedExecState } {
     const MAX_CYCLES = 1000;
 
     try {
@@ -305,6 +365,8 @@ export class LinkedCodeExecutor {
         this.pop(operands[0]!);
         break;
       case 'call':
+        // call 指令需要特殊处理，因为可能是动态链接
+        // 这里先尝试调用，如果失败会抛出异常，由外部处理
         this.call(operands[0]!);
         break;
       default:
@@ -312,7 +374,7 @@ export class LinkedCodeExecutor {
     }
   }
 
-  // 指令实现（与 AssemblyVM 类似，但跳转使用地址）
+  // 指令实现
   private mov(dest: string, src: string): void {
     const value = this.getValue(src);
     this.setValue(dest, value);
@@ -356,20 +418,24 @@ export class LinkedCodeExecutor {
     this.updateFlags(result);
   }
 
-  // 跳转指令：使用地址跳转（静态链接）
+  // 跳转指令：支持地址或符号名（动态链接）
   private jmp(operand: string): void {
-    // 静态链接：操作数必须是地址（数字）
+    // 如果是数字，可能是相对地址或绝对地址
     if (/^-?\d+$/.test(operand)) {
-      const targetAddress = parseInt(operand, 10);
+      let targetAddress = parseInt(operand, 10);
+      
+      // 如果目标地址小于 1000，可能是相对地址，需要转换为当前段的绝对地址
+      const currentSegmentIndex = this.state.currentSegment;
+      if (targetAddress < 1000 && currentSegmentIndex > 0) {
+        // 这是相对地址，需要转换为绝对地址
+        targetAddress = currentSegmentIndex * 1000 + targetAddress;
+      }
+      
       this.state.pc = targetAddress;
+      this.state.currentSegment = Math.floor(targetAddress / 1000);
     } else {
-      // 调试信息：输出当前 PC 和指令信息
-      const instructionIndex = this.addressToIndex.get(this.state.pc);
-      const instruction = instructionIndex !== undefined ? this.instructions[instructionIndex] : null;
-      const debugInfo = instruction 
-        ? ` (PC: ${this.state.pc}, 指令: ${instruction.opcode} ${instruction.operands.join(' ')})`
-        : ` (PC: ${this.state.pc})`;
-      throw new Error(`无效的跳转地址: ${operand}${debugInfo}`);
+      // 符号名不支持在 jmp 中使用（应该是 call）
+      throw new Error(`无效的跳转地址: ${operand}`);
     }
   }
 
@@ -412,36 +478,97 @@ export class LinkedCodeExecutor {
   private ret(): void {
     const sp = this.state.registers.get('sp') || 1023;
     const returnAddress = this.state.stack.get(sp);
+    const currentSegment = this.state.currentSegment;
     
-    if (returnAddress !== undefined) {
-      // 从栈中弹出返回地址并跳转回去
-      this.state.pc = returnAddress;
+    if (returnAddress !== undefined && returnAddress !== null) {
+      // 先弹出栈（恢复 sp）
       this.state.registers.set('sp', sp + 1);
       this.state.stack.delete(sp);
+      
+      // 从栈中弹出返回地址并跳转回去
+      // 返回地址是绝对地址，需要计算段索引和偏移
+      const segmentIndex = Math.floor(returnAddress / 1000);
+      
+      // 验证段是否存在
+      if (!this.segments.has(segmentIndex)) {
+        throw new Error(`返回地址 ${returnAddress} 指向不存在的段 ${segmentIndex}`);
+      }
+      
+      // 验证返回地址是否有效
+      const addressToIndex = this.segmentAddressToIndex.get(segmentIndex);
+      if (!addressToIndex || addressToIndex.get(returnAddress) === undefined) {
+        throw new Error(`返回地址 ${returnAddress} 在段 ${segmentIndex} 中不存在`);
+      }
+      
+      // 日志：跨段返回
+      if (currentSegment !== segmentIndex) {
+        console.log(`↩️  [段 ${currentSegment} → 段 ${segmentIndex}] 返回，地址: ${returnAddress}`);
+      }
+      
+      this.state.pc = returnAddress;
+      this.state.currentSegment = segmentIndex;
     } else {
-      // 栈为空，说明是主函数返回，程序结束
+      // 栈为空或者返回地址无效，说明是主函数返回，程序结束
       this.state.halted = true;
     }
   }
 
-  // call 指令：使用地址调用（静态链接）
-  private call(operand: string): void {
-    // 静态链接：操作数必须是地址（数字）
-    if (!/^-?\d+$/.test(operand)) {
-      throw new Error(`无效的函数调用地址: ${operand}`);
+  // call 指令：支持地址或符号名（动态链接）
+  // 注意：如果是符号名，需要外部先调用 loadLibraryFunction 加载到 libMap
+  call(operand: string): void {
+    // 先获取返回地址（在跳转之前）
+    const sp = this.state.registers.get('sp') || 1023;
+    const returnAddress = this.getNextInstructionAddress();
+    const currentSegment = this.state.currentSegment;
+    
+    let targetAddress: number;
+    let targetSegment: number;
+    let isFromLibMap = false;
+    
+    // 如果是数字，直接使用地址（静态链接或同段调用）
+    if (/^-?\d+$/.test(operand)) {
+      targetAddress = parseInt(operand, 10);
+      targetSegment = Math.floor(targetAddress / 1000);
+      
+      // 验证段是否存在
+      if (!this.segments.has(targetSegment)) {
+        throw new Error(`调用地址 ${targetAddress} 指向不存在的段 ${targetSegment}`);
+      }
+    } else {
+      // 如果是符号名，从 libMap 查找（动态链接）
+      const libInfo = this.libMap.get(operand);
+      if (!libInfo) {
+        throw new Error(`未找到函数 ${operand}，需要先加载到 libMap`);
+      }
+      
+      isFromLibMap = true;
+      
+      // 获取函数入口地址（绝对地址）
+      const functionEntryAddress = libInfo.labelMap.get(operand);
+      if (functionEntryAddress === undefined) {
+        throw new Error(`函数 ${operand} 在 libMap 中没有入口地址`);
+      }
+      
+      targetAddress = functionEntryAddress;
+      targetSegment = libInfo.segmentIndex / 1000; // segmentIndex 是段地址，需要除以1000得到段索引
     }
     
-    const targetAddress = parseInt(operand, 10);
-    
     // 检查目标地址是否存在
-    const targetIndex = this.addressToIndex.get(targetAddress);
-    if (targetIndex === undefined) {
+    const addressToIndex = this.segmentAddressToIndex.get(targetSegment);
+    if (!addressToIndex || addressToIndex.get(targetAddress) === undefined) {
       throw new Error(`找不到地址 ${targetAddress} 的指令`);
     }
     
-    // 保存返回地址到栈（当前指令执行完后，PC 会自动递增，所以返回地址是 PC + 1）
-    const sp = this.state.registers.get('sp') || 1023;
-    const returnAddress = this.getNextInstructionAddress();
+    // 日志：跨段调用
+    if (currentSegment !== targetSegment) {
+      if (isFromLibMap) {
+        console.log(`🔗 [段 ${currentSegment} → 段 ${targetSegment}] 调用库函数: ${operand} (从 libMap 获取，地址: ${targetAddress})`);
+      } else {
+        console.log(`🔗 [段 ${currentSegment} → 段 ${targetSegment}] 跨段调用: 地址 ${targetAddress}`);
+      }
+    } else if (isFromLibMap) {
+      console.log(`🔗 [段 ${currentSegment}] 调用库函数: ${operand} (从 libMap 获取，地址: ${targetAddress})`);
+    }
     
     // 将返回地址压栈
     this.state.registers.set('sp', sp - 1);
@@ -449,13 +576,23 @@ export class LinkedCodeExecutor {
     
     // 跳转到目标地址
     this.state.pc = targetAddress;
+    this.state.currentSegment = targetSegment;
   }
 
   // 获取下一条指令的地址
   private getNextInstructionAddress(): number {
-    const currentIndex = this.addressToIndex.get(this.state.pc);
-    if (currentIndex !== undefined && currentIndex + 1 < this.instructions.length) {
-      return this.instructions[currentIndex + 1]!.address;
+    const segmentIndex = this.state.currentSegment;
+    const addressToIndex = this.segmentAddressToIndex.get(segmentIndex);
+    if (!addressToIndex) {
+      return this.state.pc + 1; // 默认返回当前地址 + 1
+    }
+    
+    const currentIndex = addressToIndex.get(this.state.pc);
+    if (currentIndex !== undefined) {
+      const instructions = this.segments.get(segmentIndex);
+      if (instructions && currentIndex + 1 < instructions.length) {
+        return instructions[currentIndex + 1]!.address;
+      }
     }
     return this.state.pc + 1; // 默认返回当前地址 + 1
   }
@@ -618,6 +755,7 @@ export class LinkedCodeExecutor {
       less: false
     };
     this.state.pc = 0;
+    this.state.currentSegment = 0;
     this.state.halted = false;
     this.state.cycles = 0;
   }
@@ -628,26 +766,13 @@ export class LinkedCodeExecutor {
   }
 
   // 获取当前状态
-  getState(): LinkedExecState {
+  getState(): DynamicLinkedExecState {
     return { ...this.state };
   }
 
-  // 获取指令地址（用于调试）
-  getInstructionAddress(index: number): number | null {
-    if (index >= 0 && index < this.instructions.length) {
-      return this.instructions[index]!.address;
-    }
-    return null;
-  }
-
-
-  // 重置
-  reset(): void {
-    this.resetState();
-    // 设置 PC 为第一条指令的地址
-    if (this.instructions.length > 0) {
-      this.state.pc = this.instructions[0]!.address;
-    }
+  // 获取 libMap
+  getLibMap(): Map<string, LibraryInfo> {
+    return new Map(this.libMap);
   }
 }
 

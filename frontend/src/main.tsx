@@ -3,6 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import './index.css'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
+import { loader } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
+
+// 配置 monaco-editor 从本地加载，而不是从 CDN
+loader.config({ monaco })
 
 // 懒加载页面组件
 const App = lazy(() => import('./priority-climbing/App.tsx'))

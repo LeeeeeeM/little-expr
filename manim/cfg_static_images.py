@@ -104,35 +104,37 @@ class BuildBasicBlocks(Scene):
     
     def create_block_box(self, block_id: str, statements: list, color: str):
         """创建基本块的可视化框"""
-        # 块标题
-        title = Text(block_id, font_size=18, color=color, weight=BOLD)
+        # 块标题（移到块外面）
+        title = Text(block_id, font_size=24, color=color, weight=BOLD)
         
         # 语句列表
         stmt_group = VGroup()
         if statements:
             for stmt in statements:
-                stmt_text = Text(stmt, font_size=14, color=WHITE)
+                stmt_text = Text(stmt, font_size=20, color=WHITE)
                 stmt_group.add(stmt_text)
-            stmt_group.arrange(DOWN, aligned_edge=LEFT, buff=0.1)
+            stmt_group.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
         else:
-            stmt_text = Text("(empty)", font_size=14, color=GRAY)
+            stmt_text = Text("(empty)", font_size=20, color=GRAY)
             stmt_group.add(stmt_text)
         
-        # 组合
-        content = VGroup(title, stmt_group)
-        content.arrange(DOWN, aligned_edge=LEFT, buff=0.2)
+        # 只包含语句内容（不包含标题）
+        content = stmt_group
         
-        # 创建框
+        # 创建框（更大的 buff 使块更大）
         box = SurroundingRectangle(
             content,
             color=color,
-            buff=0.2,
-            corner_radius=0.2,
+            buff=0.3,
+            corner_radius=0.3,
             stroke_width=3
         )
         
-        # 组合所有元素
-        block = VGroup(box, content)
+        # 将标题放在框的上方
+        title.next_to(box, UP, buff=0.2)
+        
+        # 组合所有元素：标题在上，框和内容在下
+        block = VGroup(title, box, content)
         
         return block
 
@@ -272,30 +274,36 @@ class FinalCFG(Scene):
     
     def create_block_box(self, block_id: str, statements: list, color: str):
         """创建基本块的可视化框"""
-        title = Text(block_id, font_size=18, color=color, weight=BOLD)
+        # 块标题（移到块外面）
+        title = Text(block_id, font_size=24, color=color, weight=BOLD)
         
         stmt_group = VGroup()
         if statements:
             for stmt in statements:
-                stmt_text = Text(stmt, font_size=14, color=WHITE)
+                stmt_text = Text(stmt, font_size=20, color=WHITE)
                 stmt_group.add(stmt_text)
-            stmt_group.arrange(DOWN, aligned_edge=LEFT, buff=0.1)
+            stmt_group.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
         else:
-            stmt_text = Text("(empty)", font_size=14, color=GRAY)
+            stmt_text = Text("(empty)", font_size=20, color=GRAY)
             stmt_group.add(stmt_text)
         
-        content = VGroup(title, stmt_group)
-        content.arrange(DOWN, aligned_edge=LEFT, buff=0.2)
+        # 只包含语句内容（不包含标题）
+        content = stmt_group
         
+        # 创建框（更大的 buff 使块更大）
         box = SurroundingRectangle(
             content,
             color=color,
-            buff=0.2,
-            corner_radius=0.2,
+            buff=0.3,
+            corner_radius=0.3,
             stroke_width=3
         )
         
-        block = VGroup(box, content)
+        # 将标题放在框的上方
+        title.next_to(box, UP, buff=0.2)
+        
+        # 组合所有元素：标题在上，框和内容在下
+        block = VGroup(title, box, content)
         return block
 
 
@@ -541,30 +549,36 @@ class BlockMerging(Scene):
     
     def create_block_box(self, block_id: str, statements: list, color: str):
         """创建基本块的可视化框"""
-        title = Text(block_id, font_size=16, color=color, weight=BOLD)
+        # 块标题（移到块外面）
+        title = Text(block_id, font_size=24, color=color, weight=BOLD)
         
         stmt_group = VGroup()
         if statements:
             for stmt in statements:
-                stmt_text = Text(stmt, font_size=12, color=WHITE)
+                stmt_text = Text(stmt, font_size=20, color=WHITE)
                 stmt_group.add(stmt_text)
-            stmt_group.arrange(DOWN, aligned_edge=LEFT, buff=0.1)
+            stmt_group.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
         else:
-            stmt_text = Text("(empty)", font_size=12, color=GRAY)
+            stmt_text = Text("(empty)", font_size=20, color=GRAY)
             stmt_group.add(stmt_text)
         
-        content = VGroup(title, stmt_group)
-        content.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
+        # 只包含语句内容（不包含标题）
+        content = stmt_group
         
+        # 创建框（更大的 buff 使块更大）
         box = SurroundingRectangle(
             content,
             color=color,
-            buff=0.15,
-            corner_radius=0.15,
-            stroke_width=2.5
+            buff=0.3,
+            corner_radius=0.3,
+            stroke_width=3
         )
         
-        block = VGroup(box, content)
+        # 将标题放在框的上方
+        title.next_to(box, UP, buff=0.2)
+        
+        # 组合所有元素：标题在上，框和内容在下
+        block = VGroup(title, box, content)
         return block
     
     def create_arrow(self, from_block, to_block, label_text, from_idx, to_idx):

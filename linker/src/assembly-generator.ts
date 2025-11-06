@@ -31,11 +31,11 @@ export class AssemblyGenerator {
     this.lines.push(`; Function: ${cfg.functionName}`);
     this.lines.push(`${cfg.functionName}:`);
     
-    // 函数入口：保存旧的 bp，设置新的 bp = sp
-    // 注意：只有非 main 函数才需要保存 bp（main 函数是入口点）
+    // 函数入口：保存旧的 ebp，设置新的 ebp = esp
+    // 注意：只有非 main 函数才需要保存 ebp（main 函数是入口点）
     if (cfg.functionName !== 'main') {
-      this.lines.push(`  push bp              ; 保存旧的 bp`);
-      this.lines.push(`  mov bp, sp           ; 设置新的 bp = sp`);
+      this.lines.push(`  push ebp              ; 保存旧的 ebp`);
+      this.lines.push(`  mov ebp, esp           ; 设置新的 ebp = esp`);
     }
     this.lines.push('');
     
@@ -399,9 +399,9 @@ export class AssemblyGenerator {
       this.lines.push(`  add esp, ${totalVarCount}            ; 释放所有变量栈空间`);
     }
     
-    // 函数退出：恢复旧的 bp（只有非 main 函数才需要）
+    // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
     if (this.currentFunctionName !== 'main') {
-      this.lines.push(`  pop bp               ; 恢复旧的 bp`);
+      this.lines.push(`  pop ebp               ; 恢复旧的 ebp`);
     }
     
     // 清理寄存器

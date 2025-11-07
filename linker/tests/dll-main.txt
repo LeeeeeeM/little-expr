@@ -1,0 +1,19 @@
+int malloc(int a, int b);
+int free(int a, int b);
+int print(int a, int b);
+
+int add(int a, int b) {
+  return a + b;
+}
+
+int main() {
+    int result = 0;
+    result = free(10, 20);
+    result = malloc(5, 15) + result;
+    if (result > 0) {
+      free(30, 40);
+    }
+    result = result + print(100, 200);
+    result = result + add(1000, 2000);
+    return result;
+}

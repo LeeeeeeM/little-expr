@@ -8,7 +8,7 @@ import { SimpleLinker } from './lib/linker';
 import { ScopeManager } from '../entry-call/lib/scope-manager';
 import { AssemblyGenerator } from '../entry-call/lib/assembly-generator';
 import type { ControlFlowGraph } from './lib/cfg-types';
-import type { Program } from './lib/types';
+// import type { Program } from './lib/types'; // 暂时未使用，保留用于未来动态链接功能
 
 // 默认文件内容
 const DEFAULT_FILES: FileContent[] = [
@@ -81,7 +81,7 @@ const LinkerPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [successMessage, setSuccessMessage] = useState<string | undefined>();
   const [isRunning, setIsRunning] = useState(false);
-  const [ast, setAst] = useState<Program | null>(null);
+  // const [ast, setAst] = useState<Program | null>(null); // 暂时未使用，保留用于未来动态链接功能
   const [activeTab, setActiveTab] = useState<'static' | 'dynamic'>('static');
   const [isCompiled, setIsCompiled] = useState(false); // 是否编译成功
   const [linkedCode, setLinkedCode] = useState<string>(''); // 链接后的汇编代码
@@ -99,7 +99,7 @@ const LinkerPage: React.FC = () => {
     setSuccessMessage(undefined);
     setIsValid(true);
     // 切换代码时清除之前的状态
-    setAst(null);
+    // setAst(null); // 暂时未使用
     // 切换到静态链接 tab 并禁用 tab 切换
     setActiveTab('static');
     setIsCompiled(false);
@@ -111,7 +111,7 @@ const LinkerPage: React.FC = () => {
     setIsRunning(true);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
-    setAst(null);
+    // setAst(null); // 暂时未使用
     setLinkedCode('');
     setMainEntryAddress(undefined);
     
@@ -130,7 +130,7 @@ const LinkerPage: React.FC = () => {
       }
       
       // 设置 AST（原始 AST，用于可视化）
-      setAst(compileResult.ast);
+      // setAst(compileResult.ast); // 暂时未使用，保留用于未来动态链接功能
       
       // 收集被调用的函数（从 main 开始，递归收集所有被调用的函数）
       if (compileResult.cfgs && compileResult.cfgs.length > 0) {
@@ -295,7 +295,7 @@ const LinkerPage: React.FC = () => {
     setFiles(DEFAULT_FILES);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
-    setAst(null);
+    // setAst(null); // 暂时未使用
     setLinkedCode('');
     setMainEntryAddress(undefined);
     setCurrentAddress(null);

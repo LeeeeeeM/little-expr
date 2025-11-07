@@ -231,6 +231,7 @@ export class CFGGenerator {
       exitBlock: this.currentFunctionExitBlock,
       blocks: optimizedResult.blocks,
       edges: optimizedResult.edges,
+      parameters: funcDecl.parameters, // 保存函数参数信息
     };
   }
 

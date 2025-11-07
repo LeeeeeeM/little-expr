@@ -17,5 +17,6 @@ export interface ControlFlowGraph {
   exitBlock?: BasicBlock;
   blocks: BasicBlock[];
   edges: { from: string; to: string }[];
+  parameters?: Array<{ name: string; type: string }>; // 函数参数列表
 }
 

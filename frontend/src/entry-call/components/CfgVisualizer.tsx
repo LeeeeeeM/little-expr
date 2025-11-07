@@ -400,7 +400,7 @@ const CfgVisualizerInner: React.FC<CfgVisualizerProps> = ({ cfg, activeBlockId, 
       return;
     }
 
-    let retryTimer: NodeJS.Timeout | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let animationFrameId: number | null = null;
 
     // 使用 requestAnimationFrame 确保在下一帧渲染后再聚焦

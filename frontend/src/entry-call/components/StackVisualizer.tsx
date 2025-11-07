@@ -1,5 +1,5 @@
 import React from 'react';
-import type { StackFrame, ScopeInfo } from '../CodegenVmPage';
+import type { StackFrame, ScopeInfo } from '../EntryCallPage';
 
 interface StackVisualizerProps {
   stackFrames: StackFrame[];
@@ -166,8 +166,8 @@ export const StackVisualizer: React.FC<StackVisualizerProps> = ({
                     variable,
                     originalIndex
                   }))
-                  .sort((a, b) => b.variable.offset - a.variable.offset)
-                  .map(({ variable, originalIndex }) => {
+                  .sort((a: { variable: { name: string; offset: number; init: boolean }; originalIndex: number }, b: { variable: { name: string; offset: number; init: boolean }; originalIndex: number }) => b.variable.offset - a.variable.offset)
+                  .map(({ variable, originalIndex }: { variable: { name: string; offset: number; init: boolean }; originalIndex: number }) => {
                   // 根据 offset 的正负决定显示 ebp+ 还是 ebp-
                   // 正数 offset 表示函数参数（ebp+2, ebp+3），负数 offset 表示局部变量（ebp-1, ebp-2）
                   const offsetDisplay = variable.offset >= 0 

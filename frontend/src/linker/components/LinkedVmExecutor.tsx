@@ -10,7 +10,6 @@ interface LinkedVmExecutorProps {
 export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, entryAddress, onStateChange }) => {
   const [executor] = useState(() => new LinkedCodeExecutor());
   const [vmState, setVmState] = useState<LinkedExecState | null>(null);
-  const [currentAddress, setCurrentAddress] = useState<number | null>(null);
   const [isAutoExecuting, setIsAutoExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoExecuteIntervalRef = useRef<number | null>(null);
@@ -21,7 +20,6 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
       try {
         executor.loadLinkedCode(linkedCode, entryAddress);
         setVmState(executor.getState());
-        setCurrentAddress(null);
         onStateChange?.(null);
         setError(null);
       } catch (err) {
@@ -37,7 +35,6 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
     try {
       const result = executor.step();
       setVmState(result.state);
-      setCurrentAddress(result.currentAddress);
       onStateChange?.(result.currentAddress);
       setError(result.success ? null : result.output);
     } catch (err) {
@@ -67,7 +64,6 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
         }
         const result = executor.step();
         setVmState(result.state);
-        setCurrentAddress(result.currentAddress);
         onStateChange?.(result.currentAddress);
         setError(result.success ? null : result.output);
         
@@ -91,7 +87,6 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
     setIsAutoExecuting(false);
     executor.reset();
     setVmState(executor.getState());
-    setCurrentAddress(null);
     onStateChange?.(null);
     setError(null);
   };

@@ -225,10 +225,8 @@ export class AssemblyGenerator {
       variableNames = [...paramNames, ...variableNames];
       
       // 标记函数参数为已初始化（它们已经在栈中，通过 ebp 访问）
-      for (const paramName of paramNames) {
-        // 参数不需要在作用域中分配空间，因为它们通过 ebp 访问
-        // 但我们需要在作用域信息中记录它们，以便在栈布局中显示
-      }
+      // 参数不需要在作用域中分配空间，因为它们通过 ebp 访问
+      // 但我们需要在作用域信息中记录它们，以便在栈布局中显示
     }
     
     this.scopeManager.enterScope(scopeId, variableNames);

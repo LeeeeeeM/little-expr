@@ -187,6 +187,7 @@ const CfgPage: React.FC = () => {
   const [ast, setAst] = useState<Program | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cfg' | 'ast'>('cfg');
+  const [isCompiled, setIsCompiled] = useState(false); // 是否编译成功
 
   const handleCodeChange = useCallback((newCode: string) => {
     setCode(newCode);
@@ -197,6 +198,9 @@ const CfgPage: React.FC = () => {
     setCfg(null);
     setAst(null);
     setSelectedBlockId(null);
+    // 切换到 cfg tab 并禁用 tab 切换
+    setActiveTab('cfg');
+    setIsCompiled(false);
   }, []);
 
   const handleCompile = useCallback(async () => {
@@ -218,6 +222,7 @@ const CfgPage: React.FC = () => {
         const errorMsg = compileResult.errors.join('; ') || '编译失败';
         setErrorMessage(errorMsg);
         setIsValid(false);
+        setIsCompiled(false);
         return;
       }
       
@@ -231,15 +236,18 @@ const CfgPage: React.FC = () => {
         setIsRunning(false);
         setSuccessMessage(`编译成功！生成了 ${compileResult.cfgs.length} 个函数的 CFG`);
         setIsValid(true);
+        setIsCompiled(true); // 编译成功，允许切换 tab
       } else {
         setIsRunning(false);
         setErrorMessage('未找到函数定义');
         setIsValid(false);
+        setIsCompiled(false);
       }
     } catch (error) {
       setIsRunning(false);
       setErrorMessage(error instanceof Error ? error.message : '编译错误');
       setIsValid(false);
+      setIsCompiled(false);
     }
   }, [code]);
 
@@ -249,6 +257,9 @@ const CfgPage: React.FC = () => {
     setCfg(null);
     setAst(null);
     setSelectedBlockId(null);
+    // 切换到 cfg tab 并禁用 tab 切换
+    setActiveTab('cfg');
+    setIsCompiled(false);
   }, []);
 
   const handleBlockSelect = useCallback((blockId: string | null) => {
@@ -327,22 +338,24 @@ const CfgPage: React.FC = () => {
             {/* Tab 切换栏 */}
             <div className="flex border-b border-gray-200 bg-gray-50">
               <button
-                onClick={() => setActiveTab('cfg')}
+                onClick={() => isCompiled && setActiveTab('cfg')}
+                disabled={!isCompiled}
                 className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'cfg'
                     ? 'bg-white text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 CFG
               </button>
               <button
-                onClick={() => setActiveTab('ast')}
+                onClick={() => isCompiled && setActiveTab('ast')}
+                disabled={!isCompiled}
                 className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'ast'
                     ? 'bg-white text-blue-600 border-b-2 border-blue-600'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 AST
               </button>

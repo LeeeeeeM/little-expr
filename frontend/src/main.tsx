@@ -15,6 +15,7 @@ const App = lazy(() => import('./priority-climbing/App.tsx'))
 const CfgPage = lazy(() => import('./ast-cfg/CfgPage.tsx'))
 const StackScopePage = lazy(() => import('./stack-scope/StackScopePage.tsx'))
 const CodegenVmPage = lazy(() => import('./codegen-vm/CodegenVmPage.tsx'))
+const EntryCallPage = lazy(() => import('./entry-call/EntryCallPage.tsx'))
 
 // 加载中的占位组件
 const LoadingFallback = () => (
@@ -67,6 +68,7 @@ const RouterContent = () => {
         <Route path="/ast-cfg" element={<LazyRoute component={CfgPage} />} />
         <Route path="/stack-scope" element={<LazyRoute component={StackScopePage} />} />
         <Route path="/codegen-vm" element={<LazyRoute component={CodegenVmPage} />} />
+        <Route path="/entry-call" element={<LazyRoute component={EntryCallPage} />} />
       </Routes>
     </>
   )

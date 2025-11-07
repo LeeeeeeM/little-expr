@@ -13,6 +13,7 @@ const menuItems: MenuItem[] = [
   { path: '/ast-cfg', label: 'AST && CFG' },
   // { path: '/stack-scope', label: '栈布局可视化' },
   // { path: '/codegen-vm', label: '代码生成与虚拟机' },
+  { path: '/entry-call', label: '程序入口与函数调用' },
 ];
 
 export const Menu: React.FC = () => {

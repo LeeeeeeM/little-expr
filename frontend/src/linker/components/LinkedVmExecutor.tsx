@@ -112,34 +112,31 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
     const stackEntries: Array<{ address: number; value: number; isValid: boolean }> = [];
     const stackMap = vmState.stack;
     
-    // 获取栈指针和基址指针
+    // 获取栈指针
     const sp = vmState.registers.get('sp') || 0;
-    const bp = vmState.registers.get('bp') || 0;
     
-    // 获取所有已写入的栈地址
+    // 初始栈底地址
+    const initialStackBottom = 1023;
+    
+    // 获取所有已写入的栈地址，用于确定显示范围
     const writtenAddresses = Array.from(stackMap.keys());
     
-    if (writtenAddresses.length === 0) {
-      // 如果栈为空，显示从初始栈底到 SP 的范围
-      const initialStackBottom = 1023; // 初始栈底
-      for (let addr = initialStackBottom; addr >= sp; addr--) {
-        const isValid = addr >= sp; // 地址 >= SP 就是有效的
-        stackEntries.push({ address: addr, value: 0, isValid });
-      }
-    } else {
-      // 显示所有已写入的地址
-      const allAddresses = new Set([...writtenAddresses, sp, bp]);
-      const minAddr = Math.min(...Array.from(allAddresses));
-      const maxAddr = Math.max(...Array.from(allAddresses));
-      
-      // 从高地址到低地址显示（栈底在上，栈顶在下）
-      for (let addr = maxAddr; addr >= minAddr; addr--) {
-        const value = stackMap.get(addr) ?? 0;
-        // 有效判断：地址 >= SP 就是有效的（包括当前栈帧和调用者栈帧）
-        // 地址 < SP 就是已释放的
-        const isValid = addr >= sp;
-        stackEntries.push({ address: addr, value, isValid });
-      }
+    // 确定最小地址：显示从初始栈底到最小已写入地址（或 SP，取更小的）
+    // 这样即使地址 < SP（已释放），只要有数据写入过，也会显示
+    let minAddr = sp;
+    if (writtenAddresses.length > 0) {
+      const minWrittenAddr = Math.min(...writtenAddresses);
+      minAddr = Math.min(minWrittenAddr, sp);
+    }
+    
+    // 始终显示从初始栈底（1023）到最小地址的所有地址
+    // 包括已释放的地址（< SP）也会显示
+    for (let addr = initialStackBottom; addr >= minAddr; addr--) {
+      const value = stackMap.get(addr) ?? 0;
+      // 有效判断：地址 >= SP 就是有效的（包括当前栈帧和调用者栈帧）
+      // 地址 < SP 就是已释放的
+      const isValid = addr >= sp;
+      stackEntries.push({ address: addr, value, isValid });
     }
     
     return stackEntries;

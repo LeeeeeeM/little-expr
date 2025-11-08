@@ -185,23 +185,9 @@ export class DLLRunner {
       console.log('📝 解析源代码...');
       const parser = new StatementParser(mainSourceCode);
       
-      // 如果提供了库函数，将它们注册到解析器的上下文中（作为已定义的函数）
-      if (libraryFunctions && libraryFunctions.size > 0) {
-        const context = parser.getContext();
-        // 将库函数添加到全局作用域的函数表中
-        for (const funcName of libraryFunctions.keys()) {
-          if (!context.globalScope.functions.has(funcName)) {
-            // 创建一个空的函数体作为函数声明
-            const emptyBody = { type: 'BlockStatement', statements: [] } as any;
-            context.globalScope.functions.set(funcName, {
-              name: funcName,
-              returnType: 'int' as any, // 假设返回 int
-              parameters: [],
-              body: emptyBody
-            });
-          }
-        }
-      }
+      // 注意：不再自动添加库函数到解析器上下文
+      // 主程序必须声明所有使用的函数（包括库函数）
+      // 这样可以在编译时检查函数是否已声明
       
       const parseResult = parser.parse();
       
@@ -402,17 +388,33 @@ export class DLLRunner {
       }
       
       console.log(`找到 ${files.length} 个库文件:`);
-      const libraryFiles: string[] = [];
+      const libraryFiles: Array<{ path: string; content: string }> = [];
       for (const file of files) {
         const filePath = path.join(libraryFullPath, file);
         const content = fs.readFileSync(filePath, 'utf-8');
-        libraryFiles.push(content);
+        libraryFiles.push({ path: filePath, content });
         console.log(`  - ${file}`);
       }
       console.log();
       
+      // 先单独编译每个库文件，检查函数声明
+      console.log('🔍 检查每个库文件的函数声明...');
+      for (const libFile of libraryFiles) {
+        const parser = new StatementParser(libFile.content);
+        const parseResult = parser.parse();
+        
+        if (!parseResult.ast || parseResult.errors.length > 0) {
+          console.error(`❌ 库文件 ${path.basename(libFile.path)} 解析失败:`);
+          for (const error of parseResult.errors) {
+            console.error(`  - ${error.message}`);
+          }
+          process.exit(1);
+        }
+      }
+      console.log('✅ 所有库文件的函数声明检查通过\n');
+      
       // 合并所有库文件内容
-      librarySourceCode = libraryFiles.join('\n\n');
+      librarySourceCode = libraryFiles.map(f => f.content).join('\n\n');
       
       console.log('库文件源代码（合并后）:');
       console.log('─'.repeat(50));

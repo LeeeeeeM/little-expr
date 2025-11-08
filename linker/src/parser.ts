@@ -739,6 +739,20 @@ export class StatementParser {
   }
 
   private parseFunctionCall(callee: Identifier): FunctionCall {
+    // 检查函数是否已声明
+    const funcName = callee.name;
+    const functionInfo = this.findFunctionInScope(funcName);
+    
+    if (!functionInfo) {
+      const token = this.lexer.getCurrentToken();
+      this.errors.push({
+        message: `Function '${funcName}' is not declared`,
+        position: token?.position || 0,
+        line: token?.line || 1,
+        column: token?.column || 1
+      });
+    }
+    
     this.expect(TokenType.LEFTPAREN);
     const args: Expression[] = [];
     
@@ -762,6 +776,19 @@ export class StatementParser {
       const variable = currentScope.variables.get(varName);
       if (variable) {
         return variable;
+      }
+      currentScope = currentScope.parent || null;
+    }
+    return null;
+  }
+
+  // 在作用域链中查找函数
+  private findFunctionInScope(funcName: string): FunctionInfo | null {
+    let currentScope: Scope | null = this.context.currentScope;
+    while (currentScope) {
+      const func = currentScope.functions.get(funcName);
+      if (func) {
+        return func;
       }
       currentScope = currentScope.parent || null;
     }

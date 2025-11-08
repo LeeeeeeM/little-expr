@@ -34,6 +34,7 @@ export interface ParseResult {
 export class StatementParser {
   private lexer: StatementLexer;
   private errors: ParseError[] = [];
+  private declaredFunctions: Set<string> = new Set(); // 跟踪已声明的函数
 
   constructor(source: string) {
     this.lexer = new StatementLexer(source);
@@ -41,11 +42,40 @@ export class StatementParser {
 
   public parse(): ParseResult {
     this.errors = [];
+    this.declaredFunctions.clear();
     this.lexer.reset();
 
     try {
       const statements: Statement[] = [];
       
+      // 第一遍：收集所有函数声明
+      const savedPosition = this.lexer.getCurrentPosition();
+      while (!this.lexer.isAtEnd()) {
+        const token = this.lexer.getCurrentToken();
+        if (token?.type === TokenType.INT || token?.type === TokenType.FUNCTION) {
+          const nextToken = this.lexer.getNextToken();
+          if (nextToken?.type === TokenType.IDENTIFIER) {
+            const thirdToken = this.lexer.peek(2);
+            if (thirdToken?.type === TokenType.LEFTPAREN) {
+              const funcName = nextToken.value as string;
+              // 检查是否是函数声明（分号）还是函数定义（大括号）
+              const fourthToken = this.lexer.peek(3);
+              if (fourthToken?.type === TokenType.SEMICOLON) {
+                this.declaredFunctions.add(funcName);
+              } else if (fourthToken?.type === TokenType.LBRACE) {
+                // 函数定义也算作声明
+                this.declaredFunctions.add(funcName);
+              }
+            }
+          }
+        }
+        this.lexer.advance();
+      }
+      
+      // 重置到开始位置
+      this.lexer.setPosition(savedPosition);
+      
+      // 第二遍：解析并检查函数调用
       while (!this.lexer.isAtEnd()) {
         const statement = this.parseStatement();
         if (statement) {
@@ -193,10 +223,16 @@ export class StatementParser {
       // 创建一个空的函数体
       const emptyBody = ASTFactory.createBlockStatement([]);
       
+      // 注册函数声明
+      this.declaredFunctions.add(name);
+      
       // 函数声明（只有声明，没有定义）
       return ASTFactory.createFunctionDeclaration(name, returnType, parameters, emptyBody, line, column, true);
     } else {
       // 函数定义：int name() { ... }
+      // 注册函数定义（也算作声明）
+      this.declaredFunctions.add(name);
+      
       const body = this.parseBlockStatement();
       return ASTFactory.createFunctionDeclaration(name, returnType, parameters, body, line, column, false);
     }
@@ -522,6 +558,12 @@ export class StatementParser {
     const token = this.lexer.getCurrentToken();
     const line = token?.line;
     const column = token?.column;
+
+    // 检查函数是否已声明
+    const funcName = callee.name;
+    if (!this.declaredFunctions.has(funcName)) {
+      this.addError(`Function '${funcName}' is not declared`);
+    }
 
     this.expect(TokenType.LEFTPAREN);
     const args: Expression[] = [];

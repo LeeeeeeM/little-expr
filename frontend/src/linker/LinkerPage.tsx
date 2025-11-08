@@ -5,6 +5,7 @@ import { LinkedVmExecutor } from './components/LinkedVmExecutor';
 import { LinkedAssemblyViewer } from './components/LinkedAssemblyViewer';
 import { Compiler } from './lib/compiler';
 import { SimpleLinker } from './lib/linker';
+import { StatementParser } from './lib/parser';
 import { ScopeManager } from '../entry-call/lib/scope-manager';
 import { AssemblyGenerator } from '../entry-call/lib/assembly-generator';
 import type { ControlFlowGraph } from './lib/cfg-types';
@@ -116,6 +117,24 @@ const LinkerPage: React.FC = () => {
     setMainEntryAddress(undefined);
     
     try {
+      // 先单独检查每个库文件的函数声明（与后端保持一致）
+      const libraryFiles = files.filter(f => f.name.startsWith('lib/'));
+      if (libraryFiles.length > 0) {
+        for (const libFile of libraryFiles) {
+          const libParser = new StatementParser(libFile.content);
+          const libParseResult = libParser.parse();
+          
+          if (!libParseResult.ast || libParseResult.errors.length > 0) {
+            setIsRunning(false);
+            const errorMsg = libParseResult.errors.map(e => e.message).join('; ');
+            setErrorMessage(`库文件 ${libFile.name} 解析失败: ${errorMsg}`);
+            setIsValid(false);
+            setIsCompiled(false);
+            return;
+          }
+        }
+      }
+      
       // 编译生成 CFG 和 AST（合并所有文件内容）
       const compiler = new Compiler();
       const compileResult = compiler.compile(mergedCode);

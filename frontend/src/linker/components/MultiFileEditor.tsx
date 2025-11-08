@@ -48,6 +48,8 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   });
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
+  // 为每个文件保存编辑器的模型引用，以便维护独立的撤销历史
+  const fileModelsRef = useRef<Map<number, any>>(new Map());
 
   // 构建文件树结构
   const buildFileTree = (): FileTreeNode[] => {
@@ -194,23 +196,97 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-  };
-
-  // 处理文件内容变化
-  const handleFileContentChange = (newValue: string | undefined) => {
-    if (activeFileIndex >= 0 && activeFileIndex < files.length) {
-      const newFiles = [...files];
-      newFiles[activeFileIndex] = {
-        ...newFiles[activeFileIndex],
-        content: newValue || '',
-      };
-      onFilesChange(newFiles);
+    
+    // 为每个文件创建独立的模型，以维护独立的撤销历史
+    files.forEach((file, index) => {
+      const uri = monaco.Uri.parse(`file:///${file.name}`);
+      let model = monaco.editor.getModel(uri);
+      if (!model) {
+        model = monaco.editor.createModel(file.content, 'c', uri);
+      } else {
+        model.setValue(file.content);
+      }
+      fileModelsRef.current.set(index, model);
+    });
+    
+    // 设置当前活动文件的模型
+    const currentModel = fileModelsRef.current.get(activeFileIndex);
+    if (currentModel) {
+      editor.setModel(currentModel);
     }
   };
 
+  // 处理文件内容变化（通过模型变化监听）
+  useEffect(() => {
+    if (!editorRef.current) return;
+    
+    const currentModel = editorRef.current.getModel();
+    if (!currentModel) return;
+    
+    const disposable = currentModel.onDidChangeContent(() => {
+      const newValue = currentModel.getValue();
+      if (activeFileIndex >= 0 && activeFileIndex < files.length) {
+        const newFiles = [...files];
+        newFiles[activeFileIndex] = {
+          ...newFiles[activeFileIndex],
+          content: newValue,
+        };
+        onFilesChange(newFiles);
+      }
+    });
+    
+    return () => disposable.dispose();
+  }, [activeFileIndex, files, onFilesChange]);
+  
+  // 当文件列表变化时，更新模型内容
+  useEffect(() => {
+    if (!monacoRef.current) return;
+    
+    files.forEach((file, index) => {
+      const model = fileModelsRef.current.get(index);
+      if (model && model.getValue() !== file.content) {
+        model.setValue(file.content);
+      }
+    });
+  }, [files]);
+
   // 切换文件
   const handleFileSelect = (index: number) => {
+    if (index === activeFileIndex) return;
+    
+    // 保存当前文件的内容（从编辑器模型获取最新内容）
+    if (editorRef.current && activeFileIndex >= 0 && activeFileIndex < files.length) {
+      const currentModel = editorRef.current.getModel();
+      if (currentModel) {
+        const currentContent = currentModel.getValue();
+        const newFiles = [...files];
+        newFiles[activeFileIndex] = {
+          ...newFiles[activeFileIndex],
+          content: currentContent,
+        };
+        onFilesChange(newFiles);
+      }
+    }
+    
+    // 切换到新文件
     setActiveFileIndex(index);
+    
+    // 切换编辑器模型（这样每个文件有独立的撤销历史）
+    if (editorRef.current && monacoRef.current) {
+      const newModel = fileModelsRef.current.get(index);
+      if (newModel) {
+        editorRef.current.setModel(newModel);
+      } else {
+        // 如果模型不存在，创建一个新的
+        const file = files[index];
+        if (file) {
+          const uri = monacoRef.current.Uri.parse(`file:///${file.name}`);
+          const model = monacoRef.current.editor.createModel(file.content, 'c', uri);
+          fileModelsRef.current.set(index, model);
+          editorRef.current.setModel(model);
+        }
+      }
+    }
   };
 
   const activeFile = files[activeFileIndex] || files[0];
@@ -247,7 +323,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
               height="100%"
               defaultLanguage="c"
               value={activeFile?.content || ''}
-              onChange={handleFileContentChange}
+              onChange={() => {}} // 不再使用 onChange，改用模型监听
               onMount={handleEditorDidMount}
               theme="vs"
               options={{

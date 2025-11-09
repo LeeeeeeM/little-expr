@@ -20,6 +20,7 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
   useEffect(() => {
     if (linkedCode) {
       try {
+        // loadLinkedCode 内部会清空 instructions 并调用 resetState
         executor.loadLinkedCode(linkedCode, entryAddress);
         setVmState(executor.getState());
         onStateChange?.(null);
@@ -28,14 +29,17 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
         setError(err instanceof Error ? err.message : '加载链接代码失败');
       }
     } else {
-      // 如果 linkedCode 为空，重置执行器状态
-      executor.reset();
-      setVmState(null);
+      // 如果 linkedCode 为空，完全重置执行器状态
+      // 先停止自动执行
       setIsAutoExecuting(false);
       if (autoExecuteIntervalRef.current) {
         clearInterval(autoExecuteIntervalRef.current);
         autoExecuteIntervalRef.current = null;
       }
+      // 重置执行器（这会清空所有状态）
+      executor.reset();
+      // 清空 UI 状态
+      setVmState(null);
       onStateChange?.(null);
       setError(null);
     }

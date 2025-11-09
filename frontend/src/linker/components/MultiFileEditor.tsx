@@ -304,7 +304,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
         // 并且只有当不是当前活动文件时才更新（避免覆盖正在编辑的文件）
         if (currentValue !== file.content && index !== activeFileIndex) {
           model.setValue(file.content);
-        }
+    }
       }
     });
   }, [files, activeFileIndex]);
@@ -399,9 +399,20 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
 
         {/* 编辑器区域 */}
         <div className="flex-1 relative flex flex-col min-h-0 overflow-hidden">
-          <div className="flex-1 border rounded-lg overflow-hidden" style={{
-            borderColor: isValid ? '#d1d5db' : '#ef4444',
-          }}>
+          <div 
+            className="flex-1 border rounded-lg overflow-hidden" 
+            style={{
+              borderColor: isValid ? '#d1d5db' : '#ef4444',
+            }}
+            onKeyDown={(e) => {
+              // 确保键盘事件不被其他组件拦截
+              e.stopPropagation();
+            }}
+            onKeyUp={(e) => {
+              // 确保键盘事件不被其他组件拦截
+              e.stopPropagation();
+            }}
+          >
             <Editor
               height="100%"
               defaultLanguage="c"

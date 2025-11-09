@@ -626,10 +626,11 @@ export class LinkedCodeExecutor {
   }
 
   reset(): void {
+    // 完全清空指令和地址映射
+    this.instructions = [];
+    this.addressToIndex.clear();
+    // 重置所有状态
     this.resetState();
-    if (this.instructions.length > 0) {
-      this.state.pc = this.instructions[0]!.address;
-    }
   }
 }
 

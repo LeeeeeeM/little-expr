@@ -423,7 +423,19 @@ const DynamicLinkedSegmentVisualizerInner: React.FC<DynamicLinkedSegmentVisualiz
   };
 
   return (
-    <div className="h-full w-full">
+    <div 
+      className="h-full w-full"
+      onKeyDown={(e) => {
+        // 阻止键盘事件冒泡，避免影响编辑器
+        // 只有当事件来自 React Flow 内部时才处理
+        if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.react-flow')) {
+          // 允许 React Flow 处理自己的键盘事件
+          return;
+        }
+        // 否则阻止冒泡
+        e.stopPropagation();
+      }}
+    >
       <ReactFlow
         nodes={nodes.map((node): Node<NodeData> => ({
           ...node,
@@ -442,6 +454,11 @@ const DynamicLinkedSegmentVisualizerInner: React.FC<DynamicLinkedSegmentVisualiz
         nodesDraggable={true}
         nodesConnectable={false}
         elementsSelectable={true}
+        deleteKeyCode={null}
+        multiSelectionKeyCode={null}
+        selectionKeyCode={null}
+        panOnDrag={true}
+        panOnScroll={false}
         defaultEdgeOptions={{
           type: 'default',
           markerEnd: {

@@ -120,6 +120,8 @@ const LinkerPage: React.FC = () => {
     setCurrentDynamicAddress(null);
     setHasRenderedDynamic(false); // 重置渲染标记，下次点击动态链接 tab 时重新渲染
     setIsCompiled(false);
+    // 切换到静态链接 tab
+    setActiveTab('static');
     
     setIsRunning(true);
     setErrorMessage(undefined);
@@ -437,9 +439,7 @@ const LinkerPage: React.FC = () => {
     setIsValid(true);
     // 切换代码时清除之前的状态
     // setAst(null); // 暂时未使用
-    // 切换到静态链接 tab 并禁用 tab 切换
-    setActiveTab('static');
-    setIsCompiled(false);
+    // 不再自动切换 tab，允许用户在任何 tab 中编辑代码
   }, []);
 
   const handleReset = useCallback(() => {
@@ -588,8 +588,8 @@ const LinkerPage: React.FC = () => {
               {/* 动态链接 Tab 内容 - 首次点击后渲染，之后保留状态 */}
               {hasRenderedDynamic && (
                 <div className={`absolute inset-0 flex ${activeTab === 'dynamic' ? '' : 'hidden'}`}>
-                  {/* 左侧：VM 执行器 (35%) */}
-                  <div className="w-[35%] border-r border-gray-200">
+                  {/* 左侧：VM 执行器 (40%) */}
+                  <div className="w-[40%] border-r border-gray-200">
                     <DynamicLinkedVmExecutor 
                       segments={dynamicSegments}
                       onStateChange={(state) => {
@@ -607,8 +607,8 @@ const LinkerPage: React.FC = () => {
                     />
                   </div>
                   
-                  {/* 右侧：代码段可视化 (65%) */}
-                  <div className="w-[65%]">
+                  {/* 右侧：代码段可视化 (60%) */}
+                  <div className="w-[60%]">
                     {dynamicSegments.length > 0 ? (
                       <DynamicLinkedSegmentVisualizer
                         segments={dynamicSegments.filter(s => loadedSegmentIndices.has(s.segmentIndex))}

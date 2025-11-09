@@ -14,6 +14,8 @@ export const DynamicLinkedVmExecutor: React.FC<DynamicLinkedVmExecutorProps> = (
   const [isAutoExecuting, setIsAutoExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoExecuteIntervalRef = useRef<number | null>(null);
+  const stackContainerRef = useRef<HTMLDivElement | null>(null);
+  const spElementRef = useRef<HTMLDivElement | null>(null);
 
   // 当代码段加载时，初始化执行器
   useEffect(() => {
@@ -233,6 +235,29 @@ export const DynamicLinkedVmExecutor: React.FC<DynamicLinkedVmExecutorProps> = (
   const flags = vmState?.flags ?? { greater: false, equal: false, less: false };
   const currentSegment = vmState?.currentSegment ?? 0;
 
+  // 当 SP 变化时，滚动到 SP 位置，确保它在视图中
+  useEffect(() => {
+    if (spElementRef.current && stackContainerRef.current) {
+      const container = stackContainerRef.current;
+      const element = spElementRef.current;
+      
+      // 计算元素相对于容器的位置
+      const containerRect = container.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+      
+      // 计算元素在滚动容器中的偏移量
+      const elementOffsetTop = elementRect.top - containerRect.top + container.scrollTop;
+      const containerCenter = container.clientHeight / 2;
+      const targetScrollTop = elementOffsetTop - containerCenter;
+      
+      // 滚动到目标位置
+      container.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
+    }
+  }, [sp]);
+
   return (
     <div className="h-full flex flex-col bg-white">
       {/* 控制按钮 */}
@@ -359,7 +384,10 @@ export const DynamicLinkedVmExecutor: React.FC<DynamicLinkedVmExecutorProps> = (
           </div>
 
           {/* 栈显示 */}
-          <div className="flex-1 overflow-auto p-4">
+          <div 
+            ref={stackContainerRef}
+            className="flex-1 overflow-auto p-4"
+          >
             <div className="text-sm font-semibold text-gray-700 mb-2">栈（从高到低）</div>
             <div className="space-y-1">
               {stackEntries.length === 0 ? (
@@ -372,6 +400,7 @@ export const DynamicLinkedVmExecutor: React.FC<DynamicLinkedVmExecutorProps> = (
                   return (
                     <div
                       key={index}
+                      ref={isSp ? spElementRef : undefined}
                       className={`flex items-center justify-between p-2 rounded text-xs border ${
                         isBp
                           ? 'bg-blue-100 border-blue-300'

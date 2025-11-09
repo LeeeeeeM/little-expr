@@ -9,9 +9,12 @@ int add() {
     return a;
 }
 
+int x() {}
+
 int main() {
     int result = 42;
     result = add();
+    x();
     return result;
 }
 

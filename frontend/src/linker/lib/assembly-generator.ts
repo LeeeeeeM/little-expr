@@ -8,7 +8,8 @@ export class AssemblyGenerator {
   private scopeManager: ScopeManager;
   private lines: string[] = [];
   public outputCallback?: (lines: string[]) => void; // 用于逐步输出
-  private currentFunctionName: string = '';
+  private currentCfg: ControlFlowGraph | null = null; // 当前处理的 CFG
+  public highlightCallback?: (variableName: string | null) => void; // 用于高亮变量
 
   constructor(scopeManager: ScopeManager) {
     this.scopeManager = scopeManager;
@@ -19,6 +20,13 @@ export class AssemblyGenerator {
    */
   setOutputCallback(callback: (lines: string[]) => void): void {
     this.outputCallback = callback;
+  }
+
+  /**
+   * 设置高亮回调，用于高亮变量
+   */
+  setHighlightCallback(callback: (variableName: string | null) => void): void {
+    this.highlightCallback = callback;
   }
   
   /**
@@ -38,7 +46,7 @@ export class AssemblyGenerator {
     // 重置
     this.scopeManager.reset();
     this.lines = [];
-    this.currentFunctionName = cfg.functionName;
+    this.currentCfg = cfg;
     
     // 重置所有块的 visited 标记和作用域快照
     for (const block of cfg.blocks) {
@@ -85,7 +93,19 @@ export class AssemblyGenerator {
     }
     
     // 生成块标签
+    // 对于入口块，使用函数名作为标签（用于函数调用）
+    if (block.isEntry && this.currentCfg) {
+      this.addLine(`${this.currentCfg.functionName}:`);
+    } else {
     this.addLine(`${block.id}:`);
+    }
+    
+    // 如果是入口块，处理函数参数和函数序言（push ebp, mov ebp, esp）
+    // 注意：即使没有参数，也需要调用以生成函数序言（非 main 函数）
+    if (block.isEntry && this.currentCfg) {
+      const parameters = this.currentCfg.parameters || [];
+      this.handleFunctionParameters(parameters);
+    }
     
     // 处理块内语句
     let hasReturn = false;
@@ -170,6 +190,22 @@ export class AssemblyGenerator {
   }
 
   /**
+   * 处理函数参数：将参数注册到 scope-manager，不创建单独的作用域
+   * 参数通过 ebp + offset 访问，应该和局部变量在同一个函数作用域中
+   */
+  public handleFunctionParameters(parameters: Array<{ name: string; type: string }>): void {
+    // 将参数注册到 scope-manager（不创建单独的作用域）
+    const paramNames = parameters.map(p => p.name);
+    this.scopeManager.setFunctionParameters(paramNames);
+    
+    // 函数入口：保存旧的 ebp，设置新的 ebp = esp（只有非 main 函数才需要）
+    if (this.currentCfg?.functionName !== 'main') {
+      this.addLine(`  push ebp`);
+      this.addLine(`  mov ebp, esp`);
+    }
+  }
+
+  /**
    * 处理 StartCheckPoint：进入新作用域
    */
   public handleStartCheckPoint(checkPoint: StartCheckPoint): void {
@@ -177,9 +213,32 @@ export class AssemblyGenerator {
     
     // 进入作用域（分配变量并计算 offset）
     const scopeId = checkPoint.scopeId || `scope_${this.scopeManager.getScopes().length}`;
-    this.scopeManager.enterScope(scopeId, checkPoint.variableNames || []);
     
-    // 生成栈分配指令
+    // 如果是函数的第一个作用域（根作用域），将函数参数也添加到该作用域中
+    const isRootScope = this.scopeManager.getScopes().length === 0;
+    let variableNames = checkPoint.variableNames || [];
+    
+    if (isRootScope && this.currentCfg?.parameters && this.currentCfg.parameters.length > 0) {
+      // 将函数参数添加到根作用域（参数在前，局部变量在后）
+      // 参数按照声明顺序添加：第一个参数在 ebp+2，第二个参数在 ebp+3
+      const paramNames = this.currentCfg.parameters.map(p => p.name);
+      variableNames = [...paramNames, ...variableNames];
+      
+      // 标记函数参数为已初始化（它们已经在栈中，通过 ebp 访问）
+      // 参数不需要在作用域中分配空间，因为它们通过 ebp 访问
+      // 但我们需要在作用域信息中记录它们，以便在栈布局中显示
+    }
+    
+    this.scopeManager.enterScope(scopeId, variableNames);
+    
+    // 如果是根作用域且有函数参数，标记参数为已初始化
+    if (isRootScope && this.currentCfg?.parameters && this.currentCfg.parameters.length > 0) {
+      for (const param of this.currentCfg.parameters) {
+        this.scopeManager.markVariableInitialized(param.name);
+      }
+    }
+    
+    // 生成栈分配指令（只分配局部变量的空间，不包括函数参数）
     if (varCount > 0) {
       this.addLine(`  sub esp, ${varCount}`);
     }
@@ -287,6 +346,8 @@ export class AssemblyGenerator {
     // 查找变量 offset
     const offset = this.getVariableOffset(target);
     if (offset !== null) {
+      // 使用 si 指令（支持正数 offset 用于函数参数，负数 offset 用于局部变量）
+      // si 指令会将值存储到 bp + offset，所以对于函数参数（offset > 0），会存储到 ebp+2, ebp+3 等
       this.addLine(`  si ${offset}`);
     }
   }
@@ -312,6 +373,7 @@ export class AssemblyGenerator {
         // 查找变量 offset 并存储
         const offset = this.getVariableOffset(varName);
         if (offset !== null) {
+          // 使用 si 指令（支持正数 offset 用于函数参数，负数 offset 用于局部变量）
           this.addLine(`  si ${offset}`);
         }
         return;
@@ -340,6 +402,7 @@ export class AssemblyGenerator {
         const varName = ret.value.name;
         const offset = this.getFunctionLevelVariableOffset(varName);
         if (offset !== null) {
+          // 使用 li 指令（支持正数 offset 用于函数参数，负数 offset 用于局部变量）
           this.addLine(`  li ${offset}`);
         } else {
           this.addLine(`  mov eax, 0`);
@@ -357,14 +420,15 @@ export class AssemblyGenerator {
       this.addLine(`  mov eax, 0`);
     }
     
-    // 释放所有栈空间
+    // 释放所有栈空间（局部变量）
     const totalVarCount = this.getTotalVarCount();
     if (totalVarCount > 0) {
       this.addLine(`  add esp, ${totalVarCount}`);
     }
     
-    // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
-    if (this.currentFunctionName !== 'main') {
+    // 恢复 ebp（如果是非 main 函数）
+    if (this.currentCfg?.functionName !== 'main') {
+      // 恢复旧的 ebp（此时 esp 应该已经等于 ebp，因为局部变量已释放）
       this.addLine(`  pop ebp`);
     }
     
@@ -382,15 +446,18 @@ export class AssemblyGenerator {
     
     // 如果是 exit block 且没有显式的 return 语句
     if (isExitBlock && !hasReturn) {
-      // 释放所有栈空间
+      // 释放所有栈空间（局部变量）
       const totalVarCount = this.getTotalVarCount();
       if (totalVarCount > 0) {
         this.addLine(`  add esp, ${totalVarCount}`);
       }
-      // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
-      if (this.currentFunctionName !== 'main') {
+      
+      // 恢复 ebp（如果是非 main 函数）
+      if (this.currentCfg?.functionName !== 'main') {
+        // 恢复旧的 ebp（此时 esp 应该已经等于 ebp，因为局部变量已释放）
         this.addLine(`  pop ebp`);
       }
+      
       this.addLine(`  mov eax, 0`);
       this.addLine(`  mov ebx, 0`);
       this.addLine(`  ret`);
@@ -480,6 +547,8 @@ export class AssemblyGenerator {
         return this.generateBinaryExpression(expression, forCondition);
       case 'UnaryExpression':
         return this.generateUnaryExpression(expression);
+      case 'FunctionCall':
+        return this.generateFunctionCall(expression);
       default:
         return null;
     }
@@ -499,7 +568,14 @@ export class AssemblyGenerator {
     const varName = identifier.name;
     const offset = this.getVariableOffset(varName);
     
+    // 触发高亮回调
+    if (this.highlightCallback) {
+      this.highlightCallback(varName);
+    }
+    
     if (offset !== null) {
+      // 使用 li 指令（支持正数 offset 用于函数参数，负数 offset 用于局部变量）
+      // li 指令会从 bp + offset 读取值，所以对于函数参数（offset > 0），会从 ebp+2, ebp+3 等读取
       return `li ${offset}`;
     }
     
@@ -528,9 +604,9 @@ export class AssemblyGenerator {
       case '-':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nsub eax, ebx`;
       case '*':
-        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nimul eax, ebx`;
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmul eax, ebx`;
       case '/':
-        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nidiv ebx`;
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\ndiv eax, ebx`;
       case '%':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmod eax, ebx`;
       case '==':
@@ -571,6 +647,37 @@ export class AssemblyGenerator {
   }
 
   /**
+   * 生成函数调用
+   * 按照 C 调用约定：参数从右到左压栈，调用者清理栈
+   */
+  private generateFunctionCall(funcCall: any): string {
+    const funcName = funcCall.callee.name;
+    const args = funcCall.arguments || [];
+    
+    // 如果没有参数，直接调用
+    if (args.length === 0) {
+      return `call ${funcName}`;
+    }
+    
+    // 生成参数压栈代码（从右到左）
+    const pushInstructions: string[] = [];
+    for (let i = args.length - 1; i >= 0; i--) {
+      const argAsm = this.generateExpression(args[i]);
+      if (argAsm) {
+        pushInstructions.push(argAsm);
+        pushInstructions.push('push eax');
+      }
+    }
+    
+    // 生成调用和栈清理代码
+    const callInstruction = `call ${funcName}`;
+    const cleanupInstruction = `add esp, ${args.length}`;
+    
+    // 组合所有指令
+    return pushInstructions.join('\n') + '\n' + callInstruction + '\n' + cleanupInstruction;
+  }
+
+  /**
    * 辅助函数：为多行汇编代码添加缩进
    */
   private addIndentToMultiLine(code: string, indent: string = '  '): string[] {
@@ -579,15 +686,23 @@ export class AssemblyGenerator {
 
   /**
    * 获取变量偏移量（只返回已初始化的变量）
+   * 如果是函数参数，返回 ebp offset；否则返回局部变量的 offset
    */
   private getVariableOffset(varName: string): number | null {
+    // 首先检查是否是函数参数
+    const paramOffset = this.scopeManager.getFunctionParameterOffset(varName);
+    if (paramOffset !== null) {
+      return paramOffset; // 返回 ebp offset（正数）
+    }
+    
+    // 检查局部变量
     const scopes = this.scopeManager.getScopes();
     // 从内层到外层查找
     for (let i = scopes.length - 1; i >= 0; i--) {
       const scope = scopes[i]!;
       const variable = scope.variables.find(v => v.name === varName && v.init);
       if (variable) {
-        return variable.offset;
+        return variable.offset; // 返回局部变量的 offset（负数）
       }
     }
     return null;
@@ -610,13 +725,15 @@ export class AssemblyGenerator {
   }
 
   /**
-   * 获取总变量数
+   * 获取总变量数（只计算局部变量，不包括函数参数）
    */
   private getTotalVarCount(): number {
     const scopes = this.scopeManager.getScopes();
     let total = 0;
     for (const scope of scopes) {
-      total += scope.variables.length;
+      // 只计算局部变量（offset < 0），不包括函数参数（offset >= 0）
+      const localVarCount = scope.variables.filter(v => v.offset < 0).length;
+      total += localVarCount;
     }
     return total;
   }

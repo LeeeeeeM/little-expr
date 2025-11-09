@@ -9,8 +9,8 @@ import { DynamicLinkedSegmentVisualizer, type CodeSegment } from './components/D
 import { Compiler } from './lib/compiler';
 import { SimpleLinker } from './lib/linker';
 import { StatementParser } from './lib/parser';
-import { ScopeManager } from '../entry-call/lib/scope-manager';
-import { AssemblyGenerator } from '../entry-call/lib/assembly-generator';
+import { ScopeManager } from './lib/scope-manager';
+import { AssemblyGenerator } from './lib/assembly-generator';
 import type { ControlFlowGraph } from './lib/cfg-types';
 // import type { Program } from './lib/types'; // 暂时未使用，保留用于未来动态链接功能
 
@@ -103,18 +103,6 @@ const LinkerPage: React.FC = () => {
   const mergedCode = useMemo(() => {
     return files.map(file => file.content).join('\n\n');
   }, [files]);
-
-  const handleFilesChange = useCallback((newFiles: FileContent[]) => {
-    setFiles(newFiles);
-    setErrorMessage(undefined);
-    setSuccessMessage(undefined);
-    setIsValid(true);
-    // 切换代码时清除之前的状态
-    // setAst(null); // 暂时未使用
-    // 切换到静态链接 tab 并禁用 tab 切换
-    setActiveTab('static');
-    setIsCompiled(false);
-  }, []);
 
   const handleCompile = useCallback(async () => {
     if (!mergedCode.trim()) return;
@@ -425,8 +413,22 @@ const LinkerPage: React.FC = () => {
       setErrorMessage(error instanceof Error ? error.message : '编译错误');
       setIsValid(false);
       setIsCompiled(false);
+    } finally {
+      setIsRunning(false);
     }
-  }, [mergedCode]);
+  }, [mergedCode, files]);
+
+  const handleFilesChange = useCallback((newFiles: FileContent[]) => {
+    setFiles(newFiles);
+    setErrorMessage(undefined);
+    setSuccessMessage(undefined);
+    setIsValid(true);
+    // 切换代码时清除之前的状态
+    // setAst(null); // 暂时未使用
+    // 切换到静态链接 tab 并禁用 tab 切换
+    setActiveTab('static');
+    setIsCompiled(false);
+  }, []);
 
   const handleReset = useCallback(() => {
     setFiles(DEFAULT_FILES);

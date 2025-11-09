@@ -7,6 +7,7 @@ import { StatementType } from './types';
 export class AssemblyGenerator {
   private scopeManager: ScopeManager;
   private lines: string[] = [];
+  private currentFunctionName: string = '';
 
   constructor(scopeManager: ScopeManager) {
     this.scopeManager = scopeManager;
@@ -19,6 +20,7 @@ export class AssemblyGenerator {
     // 重置
     this.scopeManager.reset();
     this.lines = [];
+    this.currentFunctionName = cfg.functionName;
     
     // 重置所有块的 visited 标记和作用域快照
     for (const block of cfg.blocks) {
@@ -390,6 +392,11 @@ export class AssemblyGenerator {
       this.lines.push(`  add esp, ${totalVarCount}            ; 释放所有变量栈空间`);
     }
     
+    // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
+    if (this.currentFunctionName !== 'main') {
+      this.lines.push(`  pop ebp               ; 恢复旧的 ebp`);
+    }
+    
     // 清理寄存器
     this.lines.push(`  mov ebx, 0              ; 清理 ebx`);
     this.lines.push(`  ret              ; 函数结束返回`);
@@ -408,6 +415,10 @@ export class AssemblyGenerator {
       const totalVarCount = this.scopeManager.getTotalVarCount();
       if (totalVarCount > 0) {
         this.lines.push(`  add esp, ${totalVarCount}            ; 释放所有变量栈空间`);
+      }
+      // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
+      if (this.currentFunctionName !== 'main') {
+        this.lines.push(`  pop ebp               ; 恢复旧的 ebp`);
       }
       this.lines.push(`  mov eax, 0              ; 默认返回值`);
       this.lines.push(`  mov ebx, 0              ; 清理 ebx`);

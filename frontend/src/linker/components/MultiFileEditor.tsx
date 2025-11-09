@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 
 export interface FileContent {
@@ -50,6 +50,8 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   const monacoRef = useRef<any>(null);
   // 为每个文件保存编辑器的模型引用，以便维护独立的撤销历史
   const fileModelsRef = useRef<Map<number, any>>(new Map());
+  // 保存最新的 files 引用，避免闭包问题
+  const filesRef = useRef<FileContent[]>(files);
 
   // 构建文件树结构
   const buildFileTree = (): FileTreeNode[] => {
@@ -192,6 +194,32 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
     }
   };
 
+  // 为当前模型设置内容变化监听器的辅助函数
+  const setupContentChangeListener = useCallback((model: any, fileIndex: number) => {
+    if (!model) return null;
+    
+    const disposable = model.onDidChangeContent(() => {
+      const newValue = model.getValue();
+      
+      // 使用 filesRef 获取最新的 files 值，避免闭包问题
+      const currentFiles = filesRef.current;
+      
+      if (fileIndex >= 0 && fileIndex < currentFiles.length) {
+        const newFiles = [...currentFiles];
+        newFiles[fileIndex] = {
+          ...newFiles[fileIndex],
+          content: newValue,
+        };
+        onFilesChange(newFiles);
+      }
+    });
+    
+    return disposable;
+  }, [onFilesChange]);
+
+  // 保存当前监听器的清理对象（IDisposable）
+  const currentListenerDisposableRef = useRef<{ dispose: () => void } | null>(null);
+
   // 处理编辑器挂载
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
@@ -213,42 +241,73 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
     const currentModel = fileModelsRef.current.get(activeFileIndex);
     if (currentModel) {
       editor.setModel(currentModel);
+      
+      // 清理旧的监听器
+      if (currentListenerDisposableRef.current) {
+        currentListenerDisposableRef.current.dispose();
+        currentListenerDisposableRef.current = null;
+      }
+      
+      // 为新模型设置监听器
+      const disposable = setupContentChangeListener(currentModel, activeFileIndex);
+      if (disposable) {
+        currentListenerDisposableRef.current = disposable;
+      }
     }
   };
 
-  // 处理文件内容变化（通过模型变化监听）
+  // 更新 filesRef 当 files 变化时
   useEffect(() => {
-    if (!editorRef.current) return;
+    filesRef.current = files;
+  }, [files]);
+
+  // 当 activeFileIndex 变化时，重新设置监听器
+  useEffect(() => {
+    if (!editorRef.current) {
+      return;
+    }
     
     const currentModel = editorRef.current.getModel();
-    if (!currentModel) return;
+    if (!currentModel) {
+      return;
+    }
     
-    const disposable = currentModel.onDidChangeContent(() => {
-      const newValue = currentModel.getValue();
-      if (activeFileIndex >= 0 && activeFileIndex < files.length) {
-        const newFiles = [...files];
-        newFiles[activeFileIndex] = {
-          ...newFiles[activeFileIndex],
-          content: newValue,
-        };
-        onFilesChange(newFiles);
+    // 清理旧的监听器
+    if (currentListenerDisposableRef.current) {
+      currentListenerDisposableRef.current.dispose();
+      currentListenerDisposableRef.current = null;
+    }
+    
+    // 为新模型设置监听器
+    const disposable = setupContentChangeListener(currentModel, activeFileIndex);
+    if (disposable) {
+      currentListenerDisposableRef.current = disposable;
+    }
+    
+    return () => {
+      if (currentListenerDisposableRef.current) {
+        currentListenerDisposableRef.current.dispose();
+        currentListenerDisposableRef.current = null;
       }
-    });
-    
-    return () => disposable.dispose();
-  }, [activeFileIndex, files, onFilesChange]);
+    };
+  }, [activeFileIndex, setupContentChangeListener]);
   
-  // 当文件列表变化时，更新模型内容
+  // 当文件列表变化时，更新模型内容（但避免覆盖用户正在编辑的内容）
   useEffect(() => {
     if (!monacoRef.current) return;
     
     files.forEach((file, index) => {
       const model = fileModelsRef.current.get(index);
-      if (model && model.getValue() !== file.content) {
-        model.setValue(file.content);
+      if (model) {
+        const currentValue = model.getValue();
+        // 只有当内容真正不同时才更新（避免覆盖用户正在输入的内容）
+        // 并且只有当不是当前活动文件时才更新（避免覆盖正在编辑的文件）
+        if (currentValue !== file.content && index !== activeFileIndex) {
+          model.setValue(file.content);
+        }
       }
     });
-  }, [files]);
+  }, [files, activeFileIndex]);
 
   // 切换文件
   const handleFileSelect = (index: number) => {
@@ -276,6 +335,18 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
       const newModel = fileModelsRef.current.get(index);
       if (newModel) {
         editorRef.current.setModel(newModel);
+        
+        // 清理旧的监听器
+        if (currentListenerDisposableRef.current) {
+          currentListenerDisposableRef.current.dispose();
+          currentListenerDisposableRef.current = null;
+        }
+        
+        // 为新模型设置监听器
+        const disposable = setupContentChangeListener(newModel, index);
+        if (disposable) {
+          currentListenerDisposableRef.current = disposable;
+        }
       } else {
         // 如果模型不存在，创建一个新的
         const file = files[index];
@@ -284,6 +355,18 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
           const model = monacoRef.current.editor.createModel(file.content, 'c', uri);
           fileModelsRef.current.set(index, model);
           editorRef.current.setModel(model);
+          
+          // 清理旧的监听器
+          if (currentListenerDisposableRef.current) {
+            currentListenerDisposableRef.current.dispose();
+            currentListenerDisposableRef.current = null;
+          }
+          
+          // 为新模型设置监听器
+          const disposable = setupContentChangeListener(model, index);
+          if (disposable) {
+            currentListenerDisposableRef.current = disposable;
+          }
         }
       }
     }

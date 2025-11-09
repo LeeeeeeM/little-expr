@@ -105,14 +105,26 @@ const LinkerPage: React.FC = () => {
   }, [files]);
 
   const handleCompile = useCallback(async () => {
-    if (!mergedCode.trim()) return;
+    if (!mergedCode.trim()) {
+      return;
+    }
+    
+    // 先清空之前静态链接和动态链接的状态（类似于重置功能）
+    setLinkedCode('');
+    setMainEntryAddress(undefined);
+    setCurrentAddress(null);
+    // 重置动态链接相关状态
+    setDynamicSegments([]);
+    setLoadedSegmentIndices(new Set([0])); // 重置为只加载主程序段
+    setCurrentDynamicSegment(undefined);
+    setCurrentDynamicAddress(null);
+    setHasRenderedDynamic(false); // 重置渲染标记，下次点击动态链接 tab 时重新渲染
+    setIsCompiled(false);
     
     setIsRunning(true);
     setErrorMessage(undefined);
     setSuccessMessage(undefined);
     // setAst(null); // 暂时未使用
-    setLinkedCode('');
-    setMainEntryAddress(undefined);
     
     try {
       // 先单独检查每个库文件的函数声明（与后端保持一致）

@@ -1,32 +1,86 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LinkedCodeExecutor, type LinkedExecState } from '../lib/linked-code-executor';
+import { DynamicLinkedCodeExecutor, type DynamicLinkedExecState } from '../lib/dynamic-linked-code-executor';
+import type { CodeSegment } from './DynamicLinkedSegmentVisualizer';
 
-interface LinkedVmExecutorProps {
-  linkedCode: string; // 链接后的汇编代码
-  entryAddress?: number; // 入口地址（main 函数的地址）
-  onStateChange?: (currentAddress: number | null) => void; // 状态变化回调
+interface DynamicLinkedVmExecutorProps {
+  segments?: CodeSegment[]; // 代码段信息
+  onStateChange?: (state: { currentSegment: number; currentAddress: number | null }) => void; // 状态变化回调
+  onSegmentLoaded?: (segmentIndex: number) => void; // 段加载回调
 }
 
-export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, entryAddress, onStateChange }) => {
-  const [executor] = useState(() => new LinkedCodeExecutor());
-  const [vmState, setVmState] = useState<LinkedExecState | null>(null);
+export const DynamicLinkedVmExecutor: React.FC<DynamicLinkedVmExecutorProps> = ({ segments, onStateChange, onSegmentLoaded }) => {
+  const [executor] = useState(() => new DynamicLinkedCodeExecutor());
+  const [vmState, setVmState] = useState<DynamicLinkedExecState | null>(null);
   const [isAutoExecuting, setIsAutoExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoExecuteIntervalRef = useRef<number | null>(null);
 
-  // 加载链接后的代码
+  // 当代码段加载时，初始化执行器
   useEffect(() => {
-    if (linkedCode) {
+    if (segments && segments.length > 0) {
       try {
-        executor.loadLinkedCode(linkedCode, entryAddress);
+        // 加载主程序（段0）
+        // 参考 dynamic-link-runner.ts 的实现：使用 labelMap.get('main') 获取入口地址
+        const mainSegment = segments.find(s => s.segmentIndex === 0);
+        if (mainSegment) {
+          const mainCode = mainSegment.codes.join('\n');
+          // 从链接后的标签映射中获取 main 函数的入口地址（相对地址）
+          let mainEntryAddress: number | undefined;
+          if (mainSegment.labelMap) {
+            mainEntryAddress = mainSegment.labelMap.get('main');
+          }
+          // 如果没有找到，尝试从代码中查找函数入口注释
+          if (mainEntryAddress === undefined) {
+            for (const line of mainSegment.codes) {
+              if (line.includes('; 函数入口: main')) {
+                const addressMatch = line.match(/^\[(\d+)\]/);
+                if (addressMatch) {
+                  mainEntryAddress = parseInt(addressMatch[1]!, 10);
+                  break;
+                }
+              }
+            }
+          }
+          
+          executor.loadMainProgram(mainCode, mainEntryAddress);
+        }
+
+        // 设置段加载回调
+        executor.setOnSegmentLoaded((segmentIndex) => {
+          onSegmentLoaded?.(segmentIndex);
+        });
+
+        // 不立即加载库文件段，只注册函数信息（等待动态加载）
+        // 注册库函数到 libMap（使用已链接的标签映射）
+        segments.forEach(segment => {
+          if (segment.labelMap) {
+            // 使用已链接的标签映射
+            segment.labelMap.forEach((relativeAddress, label) => {
+              // 只注册函数名（不包含 block 标签）
+              if (!label.includes('_block_') && !label.includes('_entry_')) {
+                const absoluteAddress = segment.segmentIndex * 1000 + relativeAddress;
+                const labelMap = new Map<string, number>();
+                labelMap.set(label, absoluteAddress);
+                
+                executor.registerLibraryFunction(label, {
+                  segmentIndex: segment.segmentIndex * 1000,
+                  codes: segment.codes,
+                  labelMap,
+                  isLoaded: false // 标记为未加载，等待动态加载
+                });
+              }
+            });
+          }
+        });
+
         setVmState(executor.getState());
-        onStateChange?.(null);
+        onStateChange?.({ currentSegment: executor.getState().currentSegment, currentAddress: null });
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载链接代码失败');
+        setError(err instanceof Error ? err.message : '加载代码段失败');
       }
     } else {
-      // 如果 linkedCode 为空，重置执行器状态
+      // 如果 segments 为空，重置执行器状态
       executor.reset();
       setVmState(null);
       setIsAutoExecuting(false);
@@ -34,10 +88,11 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
         clearInterval(autoExecuteIntervalRef.current);
         autoExecuteIntervalRef.current = null;
       }
-      onStateChange?.(null);
+      onStateChange?.({ currentSegment: 0, currentAddress: null });
       setError(null);
     }
-  }, [linkedCode, entryAddress, executor, onStateChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments]); // 只在 segments 变化时执行，executor 和 onStateChange 是稳定的引用
 
   // 单步执行
   const handleStep = () => {
@@ -46,7 +101,10 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
     try {
       const result = executor.step();
       setVmState(result.state);
-      onStateChange?.(result.currentAddress);
+      onStateChange?.({
+        currentSegment: result.state.currentSegment,
+        currentAddress: result.currentAddress
+      });
       setError(result.success ? null : result.output);
     } catch (err) {
       setError(err instanceof Error ? err.message : '执行失败');
@@ -75,7 +133,10 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
         }
         const result = executor.step();
         setVmState(result.state);
-        onStateChange?.(result.currentAddress);
+        onStateChange?.({
+          currentSegment: result.state.currentSegment,
+          currentAddress: result.currentAddress
+        });
         setError(result.success ? null : result.output);
         
         if (result.state.halted || result.currentAddress === null) {
@@ -96,13 +157,37 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
       autoExecuteIntervalRef.current = null;
     }
     setIsAutoExecuting(false);
-    // 重置执行器，然后重新加载代码以使用正确的入口地址
+    // 重置执行器，然后重新加载代码段以使用正确的入口地址
     executor.reset();
-    if (linkedCode) {
-      executor.loadLinkedCode(linkedCode, entryAddress);
+    if (segments && segments.length > 0) {
+      // 重新加载主程序（使用 main 入口地址）
+      const mainSegment = segments.find(s => s.segmentIndex === 0);
+      if (mainSegment) {
+        const mainCode = mainSegment.codes.join('\n');
+        let mainEntryAddress: number | undefined;
+        if (mainSegment.labelMap) {
+          mainEntryAddress = mainSegment.labelMap.get('main');
+        }
+        if (mainEntryAddress === undefined) {
+          // 尝试从代码注释中查找
+          for (const line of mainSegment.codes) {
+            if (line.includes('; 函数入口: main')) {
+              const addressMatch = line.match(/^\[(\d+)\]/);
+              if (addressMatch) {
+                mainEntryAddress = parseInt(addressMatch[1]!, 10);
+                break;
+              }
+            }
+          }
+        }
+        executor.loadMainProgram(mainCode, mainEntryAddress);
+      }
     }
     setVmState(executor.getState());
-    onStateChange?.(null);
+    onStateChange?.({
+      currentSegment: executor.getState().currentSegment,
+      currentAddress: null
+    });
     setError(null);
   };
 
@@ -115,41 +200,24 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
     };
   }, []);
 
-
-  // 获取栈内容（从高地址到低地址，栈底在上，栈顶在下）
-  // 在 x86 中，栈向下增长（从高地址向低地址）
-  // SP 指向栈顶（当前最低的有效地址）
-  // 所有地址 >= SP 的都是有效的（包括当前栈帧和调用者栈帧）
-  // 所有地址 < SP 的都是已释放的（栈收缩后留下的空间）
+  // 获取栈内容
   const getStackEntries = () => {
     if (!vmState) return [];
     
     const stackEntries: Array<{ address: number; value: number; isValid: boolean }> = [];
     const stackMap = vmState.stack;
-    
-    // 获取栈指针
     const sp = vmState.registers.get('sp') || 0;
-    
-    // 初始栈底地址
     const initialStackBottom = 1023;
     
-    // 获取所有已写入的栈地址，用于确定显示范围
     const writtenAddresses = Array.from(stackMap.keys());
-    
-    // 确定最小地址：显示从初始栈底到最小已写入地址（或 SP，取更小的）
-    // 这样即使地址 < SP（已释放），只要有数据写入过，也会显示
     let minAddr = sp;
     if (writtenAddresses.length > 0) {
       const minWrittenAddr = Math.min(...writtenAddresses);
       minAddr = Math.min(minWrittenAddr, sp);
     }
     
-    // 始终显示从初始栈底（1023）到最小地址的所有地址
-    // 包括已释放的地址（< SP）也会显示
     for (let addr = initialStackBottom; addr >= minAddr; addr--) {
       const value = stackMap.get(addr) ?? 0;
-      // 有效判断：地址 >= SP 就是有效的（包括当前栈帧和调用者栈帧）
-      // 地址 < SP 就是已释放的
       const isValid = addr >= sp;
       stackEntries.push({ address: addr, value, isValid });
     }
@@ -163,6 +231,7 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
   const ax = vmState?.registers.get('ax') ?? 0;
   const bx = vmState?.registers.get('bx') ?? 0;
   const flags = vmState?.flags ?? { greater: false, equal: false, less: false };
+  const currentSegment = vmState?.currentSegment ?? 0;
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -196,7 +265,7 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
           </button>
         </div>
         <div className="text-sm text-gray-600">
-          周期: {vmState?.cycles ?? 0} | PC: {vmState?.pc ?? 0}
+          周期: {vmState?.cycles ?? 0} | PC: {vmState?.pc ?? 0} | 段: {currentSegment}
         </div>
       </div>
 
@@ -250,6 +319,17 @@ export const LinkedVmExecutor: React.FC<LinkedVmExecutorProps> = ({ linkedCode, 
                   <span className="text-gray-600">bp:</span>
                   <span className="font-mono font-semibold">{bp}</span>
                 </div>
+              </div>
+            </div>
+            {/* 当前段显示 */}
+            <div className="mb-2">
+              <div className="text-sm font-semibold text-gray-700 mb-1">当前段</div>
+              <div className="text-sm">
+                <span className="text-gray-600">段索引: </span>
+                <span className="font-mono font-semibold">{currentSegment}</span>
+                <span className="text-gray-500 ml-2">
+                  ({currentSegment === 0 ? '主程序' : `库函数段 ${currentSegment}`})
+                </span>
               </div>
             </div>
             {/* 标志位显示 */}

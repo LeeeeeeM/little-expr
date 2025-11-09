@@ -249,7 +249,10 @@ export class StatementLexer {
           this.position += 2;
           this.column += 2;
         } else {
-          throw new Error(`Unexpected character: ${char}`);
+          // 单独的 & 是取地址操作符
+          this.addToken(TokenType.ADDRESS_OF, '&');
+          this.position++;
+          this.column++;
         }
         break;
 

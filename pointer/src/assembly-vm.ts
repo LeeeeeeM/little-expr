@@ -220,6 +220,15 @@ export class AssemblyVM {
       case 'li':
         this.li(operands[0]!);
         break;
+      case 'lir':
+        this.lir(operands[0]!);
+        break;
+      case 'sir':
+        this.sir(operands[0]!);
+        break;
+      case 'lea':
+        this.lea(operands[0]!);
+        break;
       case 'and':
         this.and(operands[0]!, operands[1]!);
         break;
@@ -331,18 +340,25 @@ export class AssemblyVM {
 
   private ret(): void {
     // 如果调用栈不为空，从栈恢复返回地址
+    // 注意：如果函数返回前执行了 pop ebp，bp 已经被恢复
+    // 返回地址存储在 sp 位置（因为 pop ebp 后，sp 指向返回地址）
     const sp = this.state.registers.get('sp') || 1023;
     const returnAddress = this.state.stack.get(sp);
     
+    console.log(`DEBUG: ret - sp: ${sp}, returnAddress from stack[${sp}]: ${returnAddress}, current PC: ${this.state.pc}`);
+    
     if (returnAddress !== undefined) {
       // 恢复返回地址
+      console.log(`DEBUG: ret - returning to address ${returnAddress}, current PC: ${this.state.pc}`);
       this.state.pc = returnAddress;
       // 弹出返回地址
       this.state.registers.set('sp', sp + 1);
       this.state.stack.delete(sp);
+      console.log(`DEBUG: ret - restored PC to ${returnAddress}, sp to ${sp + 1}`);
     } else {
       // 没有调用栈，说明是 main 函数返回，结束程序
-    this.state.halted = true;
+      console.log(`DEBUG: ret - main function returning, halting`);
+      this.state.halted = true;
     }
   }
   
@@ -359,6 +375,8 @@ export class AssemblyVM {
     // 返回地址：当前 PC + 1（因为 call 执行后，如果没有跳转，PC 会递增到下一指令）
     // 但由于我们会立即跳转，所以返回地址就是下一指令的索引
     const returnAddress = this.state.pc + 1;
+    
+    console.log(`DEBUG: call ${label} - current PC: ${this.state.pc}, return address: ${returnAddress}, target: ${target}`);
     
     // 将返回地址压栈
     this.state.registers.set('sp', sp - 1);
@@ -440,6 +458,30 @@ export class AssemblyVM {
     
     console.log(`DEBUG: li ${offset} - loading from bp(${bpValue}) + ${offsetValue} = ${address}, value = ${value}`);
     this.state.registers.set('ax', value);
+  }
+
+  // lir reg: 从 reg 寄存器中存储的地址读取值到 ax（间接寻址）
+  private lir(reg: string): void {
+    const address = this.state.registers.get(reg) || 0;
+    const value = this.state.stack.get(address) || 0;
+    console.log(`DEBUG: lir ${reg} - loading from address ${address}, value = ${value}`);
+    this.state.registers.set('ax', value);
+  }
+
+  // sir reg: 将 ax 的值写入 reg 寄存器中存储的地址（间接寻址）
+  private sir(reg: string): void {
+    const address = this.state.registers.get(reg) || 0;
+    const axValue = this.state.registers.get('ax') || 0;
+    console.log(`DEBUG: sir ${reg} - storing ax(${axValue}) to address ${address}`);
+    this.state.stack.set(address, axValue);
+  }
+
+  // lea offset: 计算 bp + offset 的地址值，存储到 ax（不读取内容）
+  private lea(offset: string): void {
+    const bpValue = this.state.registers.get('bp') || 0;
+    const offsetValue = parseInt(offset, 10);
+    const address = bpValue + offsetValue;
+    this.state.registers.set('ax', address);
   }
 
   // 辅助方法

@@ -3,7 +3,7 @@
 
 import { StatementLexer } from './lexer';
 import type { Token } from './lexer';
-import { TokenType, DataType } from './types';
+import { TokenType, DataType, type TypeInfo } from './types';
 import type { ParseResult, ParseError, ParseContext, Scope, VariableInfo, FunctionInfo } from './types';
 import { 
   ASTFactory,
@@ -28,7 +28,9 @@ import {
   type BreakStatement,
   type ContinueStatement,
   type EmptyStatement,
-  type FunctionDeclaration
+  type FunctionDeclaration,
+  type AddressOfExpression,
+  type DereferenceExpression
 } from './ast';
 
 // TDZ 检查器类
@@ -172,6 +174,16 @@ export class StatementParser {
           return this.parseAssignmentStatement();
         }
         return this.parseExpressionStatement();
+      case TokenType.MUL:
+        // 检查是否是解引用赋值 *p = ...
+        const mulNextToken = this.lexer.getNextToken();
+        if (mulNextToken?.type === TokenType.IDENTIFIER) {
+          const mulThirdToken = this.lexer.peek(2);
+          if (mulThirdToken?.type === TokenType.ASSIGN) {
+            return this.parseAssignmentStatement();
+          }
+        }
+        return this.parseExpressionStatement();
       default:
         return this.parseExpressionStatement();
     }
@@ -184,14 +196,27 @@ export class StatementParser {
   }
 
   private parseAssignmentStatement(): AssignmentStatement {
-    const target = this.parseIdentifier();
+    // 检查是否是解引用赋值 *p = ...
+    const token = this.lexer.getCurrentToken();
+    let target: Identifier | DereferenceExpression;
+    
+    if (token?.type === TokenType.MUL) {
+      // 解引用赋值：*p = ...
+      this.lexer.advance(); // 跳过 *
+      const operand = this.parseIdentifier(); // * 后面必须是标识符（指针变量）
+      target = ASTFactory.createDereferenceExpression(operand);
+    } else {
+      // 普通赋值：p = ...
+      target = this.parseIdentifier();
+    }
+    
     this.expect(TokenType.ASSIGN);
     const value = this.parseExpression();
     return ASTFactory.createAssignmentStatement(target, value);
   }
 
   private parseVariableDeclaration(): VariableDeclaration {
-    const dataType = this.parseDataType();
+    const typeInfo = this.parseTypeInfo(); // 解析类型信息（支持指针）
     const name = this.parseIdentifierName();
     
     let initializer: Expression | undefined;
@@ -205,12 +230,13 @@ export class StatementParser {
     // 添加到当前作用域
     this.context.currentScope.variables.set(name, {
       name,
-      type: dataType,
+      type: typeInfo.baseType,
+      typeInfo, // 保存类型信息（包括是否为指针）
       value: initializer ? this.evaluateExpression(initializer) : undefined,
       isInitialized: !!initializer
     });
 
-    return ASTFactory.createVariableDeclaration(name, dataType, initializer);
+    return ASTFactory.createVariableDeclaration(name, typeInfo.baseType, initializer);
   }
 
   private parseLetDeclaration(): LetDeclaration {
@@ -695,6 +721,20 @@ export class StatementParser {
   private parseUnaryExpression(): Expression {
     const token = this.lexer.getCurrentToken();
     
+    // 支持取地址操作符 &
+    if (token?.type === TokenType.ADDRESS_OF) {
+      this.lexer.advance();
+      const operand = this.parseIdentifier(); // & 后面必须是标识符
+      return ASTFactory.createAddressOfExpression(operand);
+    }
+    
+    // 支持解引用操作符 *（在表达式中）
+    if (token?.type === TokenType.MUL) {
+      this.lexer.advance();
+      const operand = this.parseUnaryExpression(); // * 后面可以是表达式
+      return ASTFactory.createDereferenceExpression(operand);
+    }
+    
     if (token?.type === TokenType.SUB || token?.type === TokenType.NOT) {
       const operator = token.value as string;
       this.lexer.advance();
@@ -869,19 +909,33 @@ export class StatementParser {
     return DataType.INT; // 目前只支持int类型
   }
 
+  // 解析类型信息（支持指针类型）
+  private parseTypeInfo(): TypeInfo {
+    const baseType = this.parseDataType();
+    const token = this.lexer.getCurrentToken();
+    
+    // 检查是否有 *（指针类型）
+    if (token?.type === TokenType.MUL) {
+      this.lexer.advance(); // 跳过 *
+      return { baseType, isPointer: true };
+    }
+    
+    return { baseType, isPointer: false };
+  }
+
   private parseParameterList(): Array<{ name: string; type: DataType }> {
     const parameters: Array<{ name: string; type: DataType }> = [];
     
     if (this.lexer.getCurrentToken()?.type !== TokenType.RIGHTPAREN) {
-      const type = this.parseDataType();
+      const typeInfo = this.parseTypeInfo(); // 支持指针类型参数
       const name = this.parseIdentifierName();
-      parameters.push({ name, type });
+      parameters.push({ name, type: typeInfo.baseType });
       
       while (this.lexer.getCurrentToken()?.type === TokenType.COMMA) {
         this.lexer.advance();
-        const paramType = this.parseDataType();
+        const paramTypeInfo = this.parseTypeInfo(); // 支持指针类型参数
         const paramName = this.parseIdentifierName();
-        parameters.push({ name: paramName, type: paramType });
+        parameters.push({ name: paramName, type: paramTypeInfo.baseType });
       }
     }
     

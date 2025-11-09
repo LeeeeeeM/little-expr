@@ -105,6 +105,11 @@ export enum TokenType {
   OR = 'OR',                          // ||
   NOT = 'NOT',                        // !
   
+  // 指针操作符
+  ADDRESS_OF = 'ADDRESS_OF',          // & (取地址)
+  DEREFERENCE = 'DEREFERENCE',         // * (解引用，在表达式中)
+  POINTER = 'POINTER',                // * (在类型声明中，如 int *p)
+  
   // 其他
   COMMA = 'COMMA',                    // ,
   COLON = 'COLON',                    // :
@@ -119,10 +124,17 @@ export enum DataType {
   VOID = 'void'
 }
 
+// 类型信息（支持指针类型）
+export interface TypeInfo {
+  baseType: DataType;  // 基础类型（如 int）
+  isPointer: boolean;  // 是否为指针类型
+}
+
 // 变量信息
 export interface VariableInfo {
   name: string;
   type: DataType;
+  typeInfo?: TypeInfo;  // 类型信息（支持指针）
   value?: any;
   isInitialized: boolean;
   isTDZ?: boolean; // TDZ 标记

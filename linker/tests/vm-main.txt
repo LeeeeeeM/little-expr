@@ -1,7 +1,6 @@
-int main() {
-    int result = 42;
-    result = add();
-    return result;
+int dec() {
+    int a = 33;
+    return a;
 }
 
 int add() {
@@ -10,7 +9,9 @@ int add() {
     return a;
 }
 
-int dec() {
-    int a = 33;
-    return a;
+int main() {
+    int result = 42;
+    result = add();
+    return result;
 }
+

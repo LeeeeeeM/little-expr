@@ -35,6 +35,17 @@ export interface UnaryExpression extends ASTNode {
   operand: Expression;
 }
 
+// 指针相关表达式
+export interface AddressOfExpression extends ASTNode {
+  type: 'AddressOfExpression';
+  operand: Identifier;
+}
+
+export interface DereferenceExpression extends ASTNode {
+  type: 'DereferenceExpression';
+  operand: Expression;
+}
+
 export interface FunctionCall extends ASTNode {
   type: 'FunctionCall';
   callee: Identifier;
@@ -53,7 +64,9 @@ export type Expression =
   | BinaryExpression 
   | UnaryExpression 
   | FunctionCall 
-  | ParenthesizedExpression;
+  | ParenthesizedExpression
+  | AddressOfExpression
+  | DereferenceExpression;
 
 // 语句节点
 export interface ExpressionStatement extends ASTNode {
@@ -63,7 +76,7 @@ export interface ExpressionStatement extends ASTNode {
 
 export interface AssignmentStatement extends ASTNode {
   type: 'AssignmentStatement';
-  target: Identifier;
+  target: Identifier | DereferenceExpression;  // 支持 *p = 123 这种解引用赋值
   value: Expression;
 }
 
@@ -218,6 +231,28 @@ export class ASTFactory {
     };
   }
 
+  static createAddressOfExpression(
+    operand: Identifier,
+    position?: number
+  ): AddressOfExpression {
+    return {
+      type: 'AddressOfExpression',
+      operand,
+      position
+    };
+  }
+
+  static createDereferenceExpression(
+    operand: Expression,
+    position?: number
+  ): DereferenceExpression {
+    return {
+      type: 'DereferenceExpression',
+      operand,
+      position
+    };
+  }
+
   static createFunctionCall(
     callee: Identifier, 
     args: Expression[], 
@@ -254,7 +289,7 @@ export class ASTFactory {
   }
 
   static createAssignmentStatement(
-    target: Identifier, 
+    target: Identifier | DereferenceExpression, 
     value: Expression, 
     position?: number
   ): AssignmentStatement {

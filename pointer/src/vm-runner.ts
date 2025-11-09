@@ -2,17 +2,14 @@
 import { AssemblyVM } from './assembly-vm';
 import { Compiler } from './compiler';
 import { StatementParser } from './parser';
-import { SimpleLinker } from './linker';
 
 export class VMRunner {
   private vm: AssemblyVM;
   private compiler: Compiler;
-  private linker: SimpleLinker;
 
   constructor() {
     this.vm = new AssemblyVM();
     this.compiler = new Compiler();
-    this.linker = new SimpleLinker();
   }
 
   // 运行源代码
@@ -97,35 +94,22 @@ export class VMRunner {
       // 这样链接器才能解析所有函数标签，VM 才能找到所有函数
       const allAssembly = assemblyResults.map(r => r.assembly).join('\n\n');
       
-      // 5. 链接汇编代码（合并后的代码）
-      console.log('🔗 链接汇编代码...');
+      // 输出生成的汇编代码用于调试
+      console.log('\n📄 生成的汇编代码:');
+      console.log(allAssembly);
+      
+      // 5. 加载合并后的汇编代码到 VM（包含所有函数）
+      // VM 会自己解析标签，从 main 函数的入口标签开始执行
+      console.log('🔗 加载汇编代码到 VM...');
       interface FunctionResult {
         functionName: string;
         assembly: string;
-        linkedAssembly: string;
-        labelMap: Record<string, number>;
-        linkErrors: string[];
         vmResult: any;
       }
       const results: FunctionResult[] = [];
 
-      console.log(`\n链接所有函数: ${assemblyResults.map(r => r.functionName).join(', ')}`);
+      console.log(`\n所有函数: ${assemblyResults.map(r => r.functionName).join(', ')}`);
       
-      // 使用 linker 链接合并后的汇编代码
-      const linkResult = this.linker.link(allAssembly);
-      
-      if (linkResult.errors.length > 0) {
-        console.log('⚠️ 链接警告:');
-        for (const error of linkResult.errors) {
-          console.log(`  - ${error}`);
-        }
-      }
-      
-      console.log('\n链接后的代码:');
-      console.log(linkResult.linkedCode);
-      
-      // 6. 加载合并后的汇编代码到 VM（包含所有函数）
-      // VM 会从 main 函数的入口标签开始执行
       this.vm.loadAssembly(allAssembly);
       const vmResult = this.vm.run();
       
@@ -153,9 +137,6 @@ export class VMRunner {
       results.push({
         functionName: mainFunction.functionName,
         assembly: allAssembly,
-        linkedAssembly: linkResult.linkedCode,
-        labelMap: Object.fromEntries(linkResult.labelMap),
-        linkErrors: linkResult.errors,
         vmResult
       });
 
@@ -164,7 +145,6 @@ export class VMRunner {
         output: results.map(r => `函数 ${r.functionName}: AX = ${r.vmResult.state.registers.get('ax')}`).join('\n'),
         errors: [],
         assembly: mainFunction.assembly,
-        linkedAssembly: results.map(r => r.linkedAssembly).join('\n\n'),
         vmResult: results
       };
 

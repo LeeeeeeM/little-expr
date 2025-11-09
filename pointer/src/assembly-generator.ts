@@ -320,6 +320,14 @@ export class AssemblyGenerator {
    * 生成赋值语句
    */
   private generateAssignment(assignment: any): void {
+    // 检查是否是解引用赋值 *p = ...
+    if (assignment.target.type === 'DereferenceExpression') {
+      // 解引用赋值：*p = value
+      this.generateDereferenceAssignment(assignment);
+      return;
+    }
+    
+    // 普通赋值：p = value
     const target = assignment.target.name;
     const valueAsm = this.generateExpression(assignment.value);
     
@@ -334,6 +342,32 @@ export class AssemblyGenerator {
     } else {
       this.lines.push(`  ; 未找到变量 ${target}`);
     }
+  }
+
+  /**
+   * 生成解引用赋值语句 *p = value
+   */
+  private generateDereferenceAssignment(assignment: any): void {
+    // 1. 先计算指针的值（地址），加载到 ax
+    const pointerAsm = this.generateExpression(assignment.target.operand);
+    if (pointerAsm) {
+      this.lines.push(...this.addIndentToMultiLine(pointerAsm));
+    }
+    
+    // 2. 将地址保存到栈（因为后面计算 value 时可能会使用 bx）
+    this.lines.push(`  push ax                   ; 保存指针地址到栈`);
+    
+    // 3. 计算要赋值的值，结果在 ax
+    const valueAsm = this.generateExpression(assignment.value);
+    if (valueAsm) {
+      this.lines.push(...this.addIndentToMultiLine(valueAsm));
+    }
+    
+    // 4. 将指针地址从栈恢复到 bx
+    this.lines.push(`  pop bx                    ; 恢复指针地址到 bx`);
+    
+    // 5. 使用 sir 指令将 ax 的值写入 bx 中的地址
+    this.lines.push(`  sir bx                    ; *p = value（间接寻址写入）`);
   }
   
   /**
@@ -525,6 +559,10 @@ export class AssemblyGenerator {
         return this.generateUnaryExpression(expression);
       case 'FunctionCall':
         return this.generateFunctionCall(expression);
+      case 'AddressOfExpression':
+        return this.generateAddressOfExpression(expression);
+      case 'DereferenceExpression':
+        return this.generateDereferenceExpression(expression);
       default:
         return null;
     }
@@ -645,6 +683,38 @@ export class AssemblyGenerator {
       default:
         return 'mov eax, 0';
     }
+  }
+
+  /**
+   * 生成取地址表达式 &a
+   */
+  private generateAddressOfExpression(addrOf: any): string {
+    const varName = addrOf.operand.name;
+    const offset = this.scopeManager.getVariableOffset(varName);
+    
+    if (offset !== null) {
+      // 使用 lea 指令计算地址：lea offset（与 si、li 风格一致）
+      return `lea ${offset}`;
+    }
+    
+    // 如果找不到变量，返回 0
+    return 'mov eax, 0';
+  }
+
+  /**
+   * 生成解引用表达式 *p
+   */
+  private generateDereferenceExpression(deref: any): string {
+    // 先计算指针的值（地址）
+    const operandAsm = this.generateExpression(deref.operand);
+    
+    if (!operandAsm) {
+      return 'mov eax, 0';
+    }
+    
+    // operandAsm 已经将指针的值加载到 ax
+    // 现在使用 lir 指令从该地址读取值
+    return `${operandAsm}\nlir ax`;
   }
 
   /**

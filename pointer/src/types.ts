@@ -124,10 +124,11 @@ export enum DataType {
   VOID = 'void'
 }
 
-// 类型信息（支持指针类型）
+// 类型信息（支持指针类型，包括多级指针）
 export interface TypeInfo {
   baseType: DataType;  // 基础类型（如 int）
   isPointer: boolean;  // 是否为指针类型
+  pointerLevel?: number;  // 指针级别（1 = int *, 2 = int **, 等）
 }
 
 // 变量信息

@@ -175,13 +175,38 @@ export class StatementParser {
         }
         return this.parseExpressionStatement();
       case TokenType.MUL:
-        // 检查是否是解引用赋值 *p = ...
-        const mulNextToken = this.lexer.getNextToken();
-        if (mulNextToken?.type === TokenType.IDENTIFIER) {
-          const mulThirdToken = this.lexer.peek(2);
-          if (mulThirdToken?.type === TokenType.ASSIGN) {
-            return this.parseAssignmentStatement();
+      case TokenType.POWER:
+        // 检查是否是解引用赋值 *p = ..., **pp = ..., ***ppp = ...（支持任意级别）
+        // 向前查看，找到标识符和赋值符号
+        let lookahead = 0;
+        let foundIdentifier = false;
+        let foundAssign = false;
+        
+        // 跳过所有的 * 和 **
+        while (true) {
+          const currentToken = this.lexer.peek(lookahead);
+          if (!currentToken) break;
+          
+          if (currentToken.type === TokenType.MUL) {
+            lookahead++;
+          } else if (currentToken.type === TokenType.POWER) {
+            lookahead++;
+          } else if (currentToken.type === TokenType.IDENTIFIER) {
+            foundIdentifier = true;
+            lookahead++;
+            // 检查下一个 token 是否是 =
+            const nextToken = this.lexer.peek(lookahead);
+            if (nextToken?.type === TokenType.ASSIGN) {
+              foundAssign = true;
+            }
+            break;
+          } else {
+            break;
           }
+        }
+        
+        if (foundIdentifier && foundAssign) {
+          return this.parseAssignmentStatement();
         }
         return this.parseExpressionStatement();
       default:
@@ -196,17 +221,80 @@ export class StatementParser {
   }
 
   private parseAssignmentStatement(): AssignmentStatement {
-    // 检查是否是解引用赋值 *p = ...
+    // 检查是否是解引用赋值 *p = ..., **pp = ..., ***ppp = ...（支持任意级别）
     const token = this.lexer.getCurrentToken();
     let target: Identifier | DereferenceExpression;
     
+    console.log('[parseAssignmentStatement] 开始解析赋值语句，当前 token:', token?.type);
+    
     if (token?.type === TokenType.MUL) {
-      // 解引用赋值：*p = ...
-      this.lexer.advance(); // 跳过 *
-      const operand = this.parseIdentifier(); // * 后面必须是标识符（指针变量）
-      target = ASTFactory.createDereferenceExpression(operand);
+      // 解引用赋值：*p = ..., **pp = ..., ***ppp = ...
+      // 计算解引用的级数
+      let derefLevel = 0;
+      console.log('[parseAssignmentStatement] 遇到 MUL，开始计算解引用级数');
+      while (this.lexer.getCurrentToken()?.type === TokenType.MUL) {
+        console.log('[parseAssignmentStatement] 处理 MUL，derefLevel++');
+        this.lexer.advance(); // 跳过 *
+        derefLevel++;
+      }
+      
+      // 如果遇到 **（被识别为 POWER token），也处理
+      const currentToken = this.lexer.getCurrentToken();
+      console.log('[parseAssignmentStatement] MUL 处理完成，当前 token:', currentToken?.type, 'derefLevel:', derefLevel);
+      if (currentToken?.type === TokenType.POWER) {
+        console.log('[parseAssignmentStatement] 遇到 POWER，derefLevel += 2');
+        this.lexer.advance(); // 跳过 **
+        derefLevel += 2;
+        console.log('[parseAssignmentStatement] POWER 处理完成，当前 token:', this.lexer.getCurrentToken()?.type, 'derefLevel:', derefLevel);
+      }
+      
+      // 解析操作数（标识符）
+      console.log('[parseAssignmentStatement] 准备解析标识符，当前 token:', this.lexer.getCurrentToken()?.type);
+      const operand = this.parseIdentifier();
+      console.log('[parseAssignmentStatement] 解析到标识符:', operand.name);
+      
+      // 递归构建嵌套的解引用表达式：***ppp = *(*(*ppp))
+      let result: Expression = operand;
+      for (let i = 0; i < derefLevel; i++) {
+        result = ASTFactory.createDereferenceExpression(result);
+      }
+      target = result as DereferenceExpression;
+    } else if (token?.type === TokenType.POWER) {
+      // **pp = ..., ***ppp = ..., ****pppp = ... 的情况（在赋值语句开头，lexer 将 ** 识别为 POWER）
+      console.log('[parseAssignmentStatement] 遇到 POWER（在开头）');
+      let derefLevel = 0;
+      
+      // 循环处理所有连续的 POWER 和 MUL token
+      while (true) {
+        const currentToken = this.lexer.getCurrentToken();
+        if (!currentToken) break;
+        
+        if (currentToken.type === TokenType.POWER) {
+          console.log('[parseAssignmentStatement] 遇到 POWER，derefLevel += 2');
+          this.lexer.advance(); // 跳过 **
+          derefLevel += 2;
+        } else if (currentToken.type === TokenType.MUL) {
+          console.log('[parseAssignmentStatement] 遇到 MUL，derefLevel++');
+          this.lexer.advance(); // 跳过 *
+          derefLevel++;
+        } else {
+          // 遇到非指针符号（如 IDENTIFIER），停止解析
+          break;
+        }
+      }
+      
+      const operand = this.parseIdentifier(); // 后面必须是标识符
+      console.log('[parseAssignmentStatement] 解析到标识符:', operand.name, 'derefLevel:', derefLevel);
+      
+      // 递归构建嵌套的解引用表达式：****pppp = *(*(*(*pppp)))
+      let result: Expression = operand;
+      for (let i = 0; i < derefLevel; i++) {
+        result = ASTFactory.createDereferenceExpression(result);
+      }
+      target = result as DereferenceExpression;
     } else {
       // 普通赋值：p = ...
+      console.log('[parseAssignmentStatement] 普通赋值');
       target = this.parseIdentifier();
     }
     
@@ -216,8 +304,11 @@ export class StatementParser {
   }
 
   private parseVariableDeclaration(): VariableDeclaration {
+    console.log('[parseVariableDeclaration] 开始解析变量声明，当前 token:', this.lexer.getCurrentToken()?.type);
     const typeInfo = this.parseTypeInfo(); // 解析类型信息（支持指针）
+    console.log('[parseVariableDeclaration] parseTypeInfo 完成，准备解析标识符，当前 token:', this.lexer.getCurrentToken()?.type);
     const name = this.parseIdentifierName();
+    console.log('[parseVariableDeclaration] 解析到标识符:', name);
     
     let initializer: Expression | undefined;
     if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
@@ -729,10 +820,40 @@ export class StatementParser {
     }
     
     // 支持解引用操作符 *（在表达式中）
+    // 支持多级解引用：*p, **pp, ***ppp, ...（任意级别）
     if (token?.type === TokenType.MUL) {
+      // 计算解引用的级数
+      let derefLevel = 0;
+      while (this.lexer.getCurrentToken()?.type === TokenType.MUL) {
+        this.lexer.advance(); // 跳过 *
+        derefLevel++;
+      }
+      
+      // 如果遇到 **（被识别为 POWER token），也处理
+      if (this.lexer.getCurrentToken()?.type === TokenType.POWER) {
+        this.lexer.advance(); // 跳过 **
+        derefLevel += 2;
+      }
+      
+      // 解析操作数（可能是标识符或其他表达式）
+      const operand = this.parseUnaryExpression();
+      
+      // 递归构建嵌套的解引用表达式：***ppp = *(*(*ppp))
+      let result: Expression = operand;
+      for (let i = 0; i < derefLevel; i++) {
+        result = ASTFactory.createDereferenceExpression(result);
+      }
+      return result;
+    }
+    
+    // 支持 ** 作为两个解引用操作（**pp = *(*pp)）
+    // 注意：如果前面已经处理了 MUL，这里不会执行
+    if (token?.type === TokenType.POWER) {
       this.lexer.advance();
-      const operand = this.parseUnaryExpression(); // * 后面可以是表达式
-      return ASTFactory.createDereferenceExpression(operand);
+      const operand = this.parseUnaryExpression(); // ** 后面可以是表达式
+      // **pp 等价于 *(*pp)，即先解引用一次，再解引用一次
+      const firstDeref = ASTFactory.createDereferenceExpression(operand);
+      return ASTFactory.createDereferenceExpression(firstDeref);
     }
     
     if (token?.type === TokenType.SUB || token?.type === TokenType.NOT) {
@@ -909,18 +1030,49 @@ export class StatementParser {
     return DataType.INT; // 目前只支持int类型
   }
 
-  // 解析类型信息（支持指针类型）
+  // 解析类型信息（支持指针类型，包括多级指针）
   private parseTypeInfo(): TypeInfo {
     const baseType = this.parseDataType();
-    const token = this.lexer.getCurrentToken();
+    let pointerLevel = 0;
     
-    // 检查是否有 *（指针类型）
-    if (token?.type === TokenType.MUL) {
-      this.lexer.advance(); // 跳过 *
-      return { baseType, isPointer: true };
+    // 检查是否有 *（指针类型），支持多级指针如 int *, int **, int ***, ...（任意级别）
+    // 注意：lexer 会将 ** 识别为 POWER token，我们需要特殊处理
+    // 对于 ***，lexer 会识别为：POWER（前两个 *），MUL（第三个 *）
+    // 对于 ****，lexer 会识别为：POWER, POWER（两个 **）
+    // 循环处理所有连续的 * 和 ** token
+    console.log('[parseTypeInfo] 开始解析类型信息，baseType:', baseType);
+    while (true) {
+      const token = this.lexer.getCurrentToken();
+      if (!token) {
+        console.log('[parseTypeInfo] token 为空，退出循环');
+        break;
+      }
+      
+      console.log('[parseTypeInfo] 当前 token:', token.type, token.value, 'pointerLevel:', pointerLevel);
+      
+      // 只处理 MUL 和 POWER token，其他 token（如 IDENTIFIER）表示指针声明结束
+      if (token.type === TokenType.MUL) {
+        console.log('[parseTypeInfo] 遇到 MUL，pointerLevel++');
+        this.lexer.advance(); // 跳过 *
+        pointerLevel++;
+        // 继续循环，可能还有更多的 * 或 **
+      } else if (token.type === TokenType.POWER) {
+        console.log('[parseTypeInfo] 遇到 POWER，pointerLevel += 2');
+        // ** 在类型声明中应该被视为两个指针级别
+        this.lexer.advance(); // 跳过 **
+        pointerLevel += 2;
+        console.log('[parseTypeInfo] 处理 POWER 后，pointerLevel:', pointerLevel, '下一个 token:', this.lexer.getCurrentToken()?.type);
+        // 继续循环，可能还有更多的 * 或 **（例如 *** 的情况）
+      } else {
+        // 遇到非指针符号（如 IDENTIFIER），停止解析
+        // 此时 lexer 的当前位置应该指向标识符
+        console.log('[parseTypeInfo] 遇到非指针符号:', token.type, '停止解析，pointerLevel:', pointerLevel);
+        break;
+      }
     }
     
-    return { baseType, isPointer: false };
+    console.log('[parseTypeInfo] 解析完成，pointerLevel:', pointerLevel, '下一个 token:', this.lexer.getCurrentToken()?.type);
+    return { baseType, isPointer: pointerLevel > 0, pointerLevel: pointerLevel > 0 ? pointerLevel : undefined };
   }
 
   private parseParameterList(): Array<{ name: string; type: DataType }> {

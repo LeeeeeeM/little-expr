@@ -169,6 +169,13 @@ export class AssemblyVM {
           this.div('eax', operands[0]!);
         }
         break;
+      case 'power':
+        if (operands.length === 2) {
+          this.power(operands[0]!, operands[1]!);
+        } else {
+          throw new Error('power instruction requires 2 operands');
+        }
+        break;
       case 'cmp':
         this.cmp(operands[0]!, operands[1]!);
         break;
@@ -283,6 +290,15 @@ export class AssemblyVM {
       throw new Error('Division by zero');
     }
     const result = Math.floor(destValue / srcValue);
+    this.setValue(dest, result);
+    this.updateFlags(result);
+  }
+
+  private power(dest: string, src: string): void {
+    const base = this.getValue(dest);
+    const exponent = this.getValue(src);
+    // 计算 base ** exponent
+    const result = Math.pow(base, exponent);
     this.setValue(dest, result);
     this.updateFlags(result);
   }
@@ -462,7 +478,8 @@ export class AssemblyVM {
 
   // lir reg: 从 reg 寄存器中存储的地址读取值到 ax（间接寻址）
   private lir(reg: string): void {
-    const address = this.state.registers.get(reg) || 0;
+    // 使用 getValue 支持寄存器别名（如 ebx -> bx）
+    const address = this.getValue(reg);
     const value = this.state.stack.get(address) || 0;
     console.log(`DEBUG: lir ${reg} - loading from address ${address}, value = ${value}`);
     this.state.registers.set('ax', value);
@@ -470,7 +487,8 @@ export class AssemblyVM {
 
   // sir reg: 将 ax 的值写入 reg 寄存器中存储的地址（间接寻址）
   private sir(reg: string): void {
-    const address = this.state.registers.get(reg) || 0;
+    // 使用 getValue 支持寄存器别名（如 ebx -> bx）
+    const address = this.getValue(reg);
     const axValue = this.state.registers.get('ax') || 0;
     console.log(`DEBUG: sir ${reg} - storing ax(${axValue}) to address ${address}`);
     this.state.stack.set(address, axValue);

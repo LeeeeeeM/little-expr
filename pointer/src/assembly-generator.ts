@@ -345,29 +345,49 @@ export class AssemblyGenerator {
   }
 
   /**
-   * 生成解引用赋值语句 *p = value
+   * 生成解引用赋值语句 *p = value 或 **pp = value（支持多级指针）
    */
   private generateDereferenceAssignment(assignment: any): void {
-    // 1. 先计算指针的值（地址），加载到 ax
-    const pointerAsm = this.generateExpression(assignment.target.operand);
+    // 计算解引用的级数（**pp 是两级，*p 是一级）
+    let derefLevel = 0;
+    let currentTarget = assignment.target;
+    while (currentTarget.type === 'DereferenceExpression') {
+      derefLevel++;
+      currentTarget = currentTarget.operand;
+    }
+    
+    // 1. 先计算最内层指针的值（地址），加载到 eax
+    // 对于 **pp，先计算 pp 的值（pp 存储的地址）
+    const pointerAsm = this.generateExpression(currentTarget);
     if (pointerAsm) {
       this.lines.push(...this.addIndentToMultiLine(pointerAsm));
     }
     
-    // 2. 将地址保存到栈（因为后面计算 value 时可能会使用 bx）
-    this.lines.push(`  push ax                   ; 保存指针地址到栈`);
+    // 2. 对于多级指针，需要逐级解引用
+    // 对于 **pp = value：
+    //   - 先计算 pp 的值（一级指针的地址）
+    //   - 从该地址读取值（得到二级指针指向的地址，即 a 的地址）
+    //   - 将 value 写入该地址
+    for (let i = 1; i < derefLevel; i++) {
+      // 使用 lir 指令从当前地址读取值（得到下一级指针的地址）
+      this.lines.push(`  lir eax                   ; 解引用第 ${i} 级，获取下一级指针地址`);
+    }
     
-    // 3. 计算要赋值的值，结果在 ax
+    // 3. 将最终的目标地址保存到栈（因为后面计算 value 时可能会使用 ebx）
+    this.lines.push(`  push eax                   ; 保存目标地址到栈`);
+    
+    // 4. 计算要赋值的值，结果在 eax
     const valueAsm = this.generateExpression(assignment.value);
     if (valueAsm) {
       this.lines.push(...this.addIndentToMultiLine(valueAsm));
     }
     
-    // 4. 将指针地址从栈恢复到 bx
-    this.lines.push(`  pop bx                    ; 恢复指针地址到 bx`);
+    // 5. 将目标地址从栈恢复到 ebx
+    this.lines.push(`  pop ebx                    ; 恢复目标地址到 ebx`);
     
-    // 5. 使用 sir 指令将 ax 的值写入 bx 中的地址
-    this.lines.push(`  sir bx                    ; *p = value（间接寻址写入）`);
+    // 6. 使用 sir 指令将 eax 的值写入 ebx 中的地址
+    const levelDesc = derefLevel > 1 ? `${derefLevel}级` : '';
+    this.lines.push(`  sir ebx                    ; ${levelDesc}解引用赋值（间接寻址写入）`);
   }
   
   /**
@@ -621,6 +641,10 @@ export class AssemblyGenerator {
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\ndiv eax, ebx`;
       case '%':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmod eax, ebx`;
+      case '**':
+        // 幂运算：base ** exponent
+        // 计算 base（左操作数）和 exponent（右操作数），然后执行 power 指令
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\npower eax, ebx`;
       case '==':
         return forCondition ? cmpPart : `${cmpPart}\nsete al\nand eax, 1`;
       case '!=':
@@ -706,19 +730,37 @@ export class AssemblyGenerator {
   }
 
   /**
-   * 生成解引用表达式 *p
+   * 生成解引用表达式 *p, **pp, ***ppp, ...（支持任意级别）
    */
   private generateDereferenceExpression(deref: any): string {
-    // 先计算指针的值（地址）
-    const operandAsm = this.generateExpression(deref.operand);
+    // 计算解引用的级数
+    let derefLevel = 0;
+    let currentDeref = deref;
+    while (currentDeref.type === 'DereferenceExpression') {
+      derefLevel++;
+      currentDeref = currentDeref.operand;
+    }
+    
+    // 先计算最内层指针的值（地址）
+    const operandAsm = this.generateExpression(currentDeref);
     
     if (!operandAsm) {
       return 'mov eax, 0';
     }
     
-    // operandAsm 已经将指针的值加载到 ax
-    // 现在使用 lir 指令从该地址读取值
-    return `${operandAsm}\nlir ax`;
+    // operandAsm 已经将最内层指针的值加载到 eax
+    // 对于多级指针，需要逐级解引用
+    // 例如：***ppp = *(*(*ppp))
+    //   1. 先计算 ppp 的值（一级指针的地址）
+    //   2. 从该地址读取值（得到二级指针的地址）
+    //   3. 从该地址读取值（得到三级指针的地址）
+    //   4. 从该地址读取值（得到最终的值）
+    let result = operandAsm;
+    for (let i = 0; i < derefLevel; i++) {
+      result += '\nlir eax';
+    }
+    
+    return result;
   }
 
   /**

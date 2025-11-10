@@ -17,6 +17,7 @@ const StackScopePage = lazy(() => import('./stack-scope/StackScopePage.tsx'))
 const CodegenVmPage = lazy(() => import('./codegen-vm/CodegenVmPage.tsx'))
 const EntryCallPage = lazy(() => import('./entry-call/EntryCallPage.tsx'))
 const LinkerPage = lazy(() => import('./linker/LinkerPage.tsx'))
+const PointerPage = lazy(() => import('./pointer/PointerPage.tsx'))
 
 // 加载中的占位组件
 const LoadingFallback = () => (
@@ -71,6 +72,7 @@ const RouterContent = () => {
         <Route path="/codegen-vm" element={<LazyRoute component={CodegenVmPage} />} />
         <Route path="/entry-call" element={<LazyRoute component={EntryCallPage} />} />
         <Route path="/linker" element={<LazyRoute component={LinkerPage} />} />
+        <Route path="/pointer" element={<LazyRoute component={PointerPage} />} />
       </Routes>
     </>
   )

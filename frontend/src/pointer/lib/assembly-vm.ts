@@ -1,6 +1,14 @@
 // 汇编虚拟机 - 运行 x86-64 汇编代码
 // 这是一个简化的虚拟机，支持基本的 x86-64 指令
 
+export interface IndirectAddressInfo {
+  type: 'lea' | 'lir' | 'sir';
+  register: string; // 涉及的寄存器
+  address: number; // 计算出的地址
+  value?: number; // 读取或写入的值（lir/sir 时）
+  offset?: number; // lea 的偏移量
+}
+
 export interface VMState {
   registers: Map<string, number>;
   memory: Map<number, number>;
@@ -13,6 +21,9 @@ export interface VMState {
   pc: number; // 程序计数器
   halted: boolean;
   cycles: number; // 执行周期计数
+  lastModifiedStackAddress: number | null; // 最后修改的栈地址（用于高亮）
+  lastReadStackAddress: number | null; // 最后读取的栈地址（用于高亮）
+  indirectAddressInfo: IndirectAddressInfo | null; // 间接寻址信息（用于可视化）
 }
 
 export interface VMInstruction {
@@ -42,7 +53,10 @@ export class AssemblyVM {
       },
       pc: 0,
       halted: false,
-      cycles: 0
+      cycles: 0,
+      lastModifiedStackAddress: null,
+      lastReadStackAddress: null,
+      indirectAddressInfo: null
     };
   }
 
@@ -100,19 +114,27 @@ export class AssemblyVM {
   }
 
   // 执行单步（用于单步调试）
-  step(): { success: boolean; output: string; state: VMState; currentLine: number | null } {
+  step(): { success: boolean; output: string; state: VMState; currentLine: number | null; lastModifiedStackAddress: number | null; lastReadStackAddress: number | null; indirectAddressInfo: IndirectAddressInfo | null } {
     if (this.state.halted || this.state.pc >= this.instructions.length) {
       return {
         success: true,
         output: this.output.join('\n'),
         state: this.state,
-        currentLine: null
+        currentLine: null,
+        lastModifiedStackAddress: null,
+        lastReadStackAddress: null,
+        indirectAddressInfo: null
       };
     }
 
     try {
       const instruction = this.instructions[this.state.pc]!;
       const oldPc = this.state.pc;
+      
+      // 重置最后修改和读取的栈地址，以及间接寻址信息
+      this.state.lastModifiedStackAddress = null;
+      this.state.lastReadStackAddress = null;
+      this.state.indirectAddressInfo = null;
       
       this.executeInstruction(instruction);
       
@@ -127,7 +149,10 @@ export class AssemblyVM {
         success: true,
         output: this.output.join('\n'),
         state: this.state,
-        currentLine: instruction.originalLine
+        currentLine: instruction.originalLine,
+        lastModifiedStackAddress: this.state.lastModifiedStackAddress,
+        lastReadStackAddress: this.state.lastReadStackAddress,
+        indirectAddressInfo: this.state.indirectAddressInfo
       };
     } catch (error) {
       console.error(`[VM Error] PC=${this.state.pc}, Error:`, error);
@@ -135,7 +160,10 @@ export class AssemblyVM {
         success: false,
         output: `VM Error: ${error}`,
         state: this.state,
-        currentLine: null
+        currentLine: null,
+        lastModifiedStackAddress: null,
+        lastReadStackAddress: null,
+        indirectAddressInfo: null
       };
     }
   }
@@ -431,8 +459,10 @@ export class AssemblyVM {
     const returnAddress = this.state.pc + 1;
     
     // 将返回地址压栈
-    this.state.registers.set('sp', sp - 1);
-    this.state.stack.set(sp - 1, returnAddress);
+    const address = sp - 1;
+    this.state.registers.set('sp', address);
+    this.state.stack.set(address, returnAddress);
+    this.state.lastModifiedStackAddress = address;
     
     // 跳转到目标函数（不递增 PC，因为我们已经跳转了）
     this.state.pc = target;
@@ -479,15 +509,19 @@ export class AssemblyVM {
   private push(operand: string): void {
     const value = this.getValue(operand);
     const spValue = this.state.registers.get('sp') || 0;
-    this.state.stack.set(spValue - 1, value);
-    this.state.registers.set('sp', spValue - 1);
+    const address = spValue - 1;
+    this.state.stack.set(address, value);
+    this.state.registers.set('sp', address);
+    this.state.lastModifiedStackAddress = address;
   }
 
   private pop(operand: string): void {
     const spValue = this.state.registers.get('sp') || 0;
-    const value = this.state.stack.get(spValue) || 0;
+    const address = spValue;
+    const value = this.state.stack.get(address) || 0;
     this.state.registers.set('sp', spValue + 1);
     this.setValue(operand, value);
+    this.state.lastReadStackAddress = address;
   }
 
   // si offset: 将 ax 的值存储到 bp + offset 位置
@@ -498,6 +532,7 @@ export class AssemblyVM {
     const axValue = this.state.registers.get('ax') || 0;
     
     this.state.stack.set(address, axValue);
+    this.state.lastModifiedStackAddress = address;
   }
 
   // li offset: 从 bp + offset 位置加载值到 ax
@@ -508,6 +543,7 @@ export class AssemblyVM {
     const value = this.state.stack.get(address) || 0;
     
     this.state.registers.set('ax', value);
+    this.state.lastReadStackAddress = address;
   }
 
   // lir reg: 从 reg 寄存器中存储的地址读取值到 ax（间接寻址）
@@ -516,6 +552,15 @@ export class AssemblyVM {
     const address = this.getValue(reg);
     const value = this.state.stack.get(address) || 0;
     this.state.registers.set('ax', value);
+    this.state.lastReadStackAddress = address;
+    // 规范化寄存器名（ebx -> bx, eax -> ax）
+    const normalizedReg = reg === 'ebx' ? 'bx' : reg === 'eax' ? 'ax' : reg;
+    this.state.indirectAddressInfo = {
+      type: 'lir',
+      register: normalizedReg,
+      address: address,
+      value: value
+    };
   }
 
   // sir reg: 将 ax 的值写入 reg 寄存器中存储的地址（间接寻址）
@@ -524,6 +569,15 @@ export class AssemblyVM {
     const address = this.getValue(reg);
     const axValue = this.state.registers.get('ax') || 0;
     this.state.stack.set(address, axValue);
+    this.state.lastModifiedStackAddress = address;
+    // 规范化寄存器名（ebx -> bx, eax -> ax）
+    const normalizedReg = reg === 'ebx' ? 'bx' : reg === 'eax' ? 'ax' : reg;
+    this.state.indirectAddressInfo = {
+      type: 'sir',
+      register: normalizedReg,
+      address: address,
+      value: axValue
+    };
   }
 
   // lea offset: 计算 bp + offset 的地址值，存储到 ax（不读取内容）
@@ -532,6 +586,12 @@ export class AssemblyVM {
     const offsetValue = parseInt(offset, 10);
     const address = bpValue + offsetValue;
     this.state.registers.set('ax', address);
+    this.state.indirectAddressInfo = {
+      type: 'lea',
+      register: 'ax',
+      address: address,
+      offset: offsetValue
+    };
   }
 
   // 辅助方法
@@ -627,6 +687,9 @@ export class AssemblyVM {
     this.state.pc = 0;
     this.state.halted = false;
     this.state.cycles = 0;
+    this.state.lastModifiedStackAddress = null;
+    this.state.lastReadStackAddress = null;
+    this.state.indirectAddressInfo = null;
   }
 
   // 获取寄存器值（用于调试）

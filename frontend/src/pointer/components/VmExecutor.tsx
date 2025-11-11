@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AssemblyVM, type VMState } from '../lib/assembly-vm';
+import { AssemblyVM, type VMState, type IndirectAddressInfo } from '../lib/assembly-vm';
 
 interface VmExecutorProps {
   assemblyCode: string; // 汇编代码
@@ -11,6 +11,9 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
   const [currentLine, setCurrentLine] = useState<number | null>(null);
   const [isAutoExecuting, setIsAutoExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastModifiedStackAddress, setLastModifiedStackAddress] = useState<number | null>(null);
+  const [lastReadStackAddress, setLastReadStackAddress] = useState<number | null>(null);
+  const [indirectAddressInfo, setIndirectAddressInfo] = useState<IndirectAddressInfo | null>(null);
   const autoExecuteIntervalRef = useRef<number | null>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
   const currentLineRef = useRef<HTMLDivElement>(null);
@@ -24,6 +27,9 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
         vm.loadAssembly(assemblyCode);
         setVmState(vm.getState());
         setCurrentLine(null);
+        setLastModifiedStackAddress(null);
+        setLastReadStackAddress(null);
+        setIndirectAddressInfo(null);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : '加载汇编代码失败');
@@ -39,6 +45,9 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
       const result = vm.step();
       setVmState(result.state);
       setCurrentLine(result.currentLine);
+      setLastModifiedStackAddress(result.lastModifiedStackAddress);
+      setLastReadStackAddress(result.lastReadStackAddress);
+      setIndirectAddressInfo(result.indirectAddressInfo);
       setError(result.success ? null : result.output);
     } catch (err) {
       setError(err instanceof Error ? err.message : '执行失败');
@@ -70,6 +79,7 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
         const result = vm.step();
         setVmState(result.state);
         setCurrentLine(result.currentLine);
+        setLastModifiedStackAddress(result.lastModifiedStackAddress);
         setError(result.success ? null : result.output);
         
         // 检查是否执行完成
@@ -94,6 +104,9 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
     vm.reset();
     setVmState(vm.getState());
     setCurrentLine(null);
+    setLastModifiedStackAddress(null);
+    setLastReadStackAddress(null);
+    setIndirectAddressInfo(null);
     setError(null);
   };
 
@@ -249,19 +262,35 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
       {/* 主要内容区域 */}
       <div className="flex-1 flex overflow-hidden">
         {/* 左侧：寄存器和栈 */}
-        <div className="w-[40%] border-r border-gray-200 flex flex-col overflow-hidden">
+        <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">
           {/* 寄存器显示 */}
           <div className="p-4 border-b border-gray-200 bg-gray-50">
             <div className="mb-2">
               <div className="text-sm font-semibold text-gray-700 mb-1">寄存器</div>
               <div className="flex items-center space-x-4 text-sm">
-                <div className="flex items-center space-x-2">
+                <div className={`flex items-center space-x-2 ${
+                  indirectAddressInfo && (indirectAddressInfo.type === 'lea' || indirectAddressInfo.register === 'ax') 
+                    ? 'bg-purple-100 px-2 py-1 rounded border border-purple-300' 
+                    : ''
+                }`}>
                   <span className="text-gray-600">ax:</span>
-                  <span className="font-mono font-semibold">{ax}</span>
+                  <span className={`font-mono font-semibold ${
+                    indirectAddressInfo && (indirectAddressInfo.type === 'lea' || indirectAddressInfo.register === 'ax')
+                      ? 'text-purple-700'
+                      : ''
+                  }`}>{ax}</span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className={`flex items-center space-x-2 ${
+                  indirectAddressInfo && indirectAddressInfo.register === 'bx'
+                    ? 'bg-purple-100 px-2 py-1 rounded border border-purple-300' 
+                    : ''
+                }`}>
                   <span className="text-gray-600">bx:</span>
-                  <span className="font-mono font-semibold">{bx}</span>
+                  <span className={`font-mono font-semibold ${
+                    indirectAddressInfo && indirectAddressInfo.register === 'bx'
+                      ? 'text-purple-700'
+                      : ''
+                  }`}>{bx}</span>
                 </div>
               </div>
             </div>
@@ -277,6 +306,46 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
                 </div>
               </div>
             </div>
+            {/* 间接寻址信息显示 */}
+            {indirectAddressInfo && (
+              <div className="mt-3 p-2 bg-purple-50 border border-purple-200 rounded text-xs">
+                {indirectAddressInfo.type === 'lea' && (
+                  <div className="space-y-1">
+                    <div className="font-semibold text-purple-700">地址计算 (lea):</div>
+                    <div className="font-mono text-purple-600">
+                      bp({bp}) {indirectAddressInfo.offset !== undefined ? (indirectAddressInfo.offset >= 0 ? `+ ${indirectAddressInfo.offset}` : `${indirectAddressInfo.offset}`) : ''} = {indirectAddressInfo.address}
+                    </div>
+                    <div className="text-purple-600">→ ax = {indirectAddressInfo.address}</div>
+                  </div>
+                )}
+                {indirectAddressInfo.type === 'lir' && (
+                  <div className="space-y-1">
+                    <div className="font-semibold text-purple-700">间接读取 (lir):</div>
+                    <div className="font-mono text-purple-600">
+                      {indirectAddressInfo.register} = {vmState?.registers.get(indirectAddressInfo.register) ?? 0}
+                    </div>
+                    <div className="text-purple-600">
+                      → 地址 [{indirectAddressInfo.address}] = {indirectAddressInfo.value}
+                    </div>
+                    <div className="text-purple-600">→ ax = {indirectAddressInfo.value}</div>
+                  </div>
+                )}
+                {indirectAddressInfo.type === 'sir' && (
+                  <div className="space-y-1">
+                    <div className="font-semibold text-purple-700">间接写入 (sir):</div>
+                    <div className="font-mono text-purple-600">
+                      ax = {indirectAddressInfo.value}
+                    </div>
+                    <div className="text-purple-600">
+                      {indirectAddressInfo.register} = {vmState?.registers.get(indirectAddressInfo.register) ?? 0}
+                    </div>
+                    <div className="text-purple-600">
+                      → 地址 [{indirectAddressInfo.address}] = {indirectAddressInfo.value}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {/* 标志位显示 */}
             <div>
               <div className="text-sm font-semibold text-gray-700 mb-1">标志位</div>
@@ -317,13 +386,19 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
                   const isSp = entry.address === sp;
                   const isBp = entry.address === bp;
                   const isValid = entry.isValid;
+                  const isModified = entry.address === lastModifiedStackAddress;
+                  const isRead = entry.address === lastReadStackAddress;
                   return (
                     <div
                       key={index}
                       ref={isSp ? spElementRef : undefined}
-                      className={`flex items-center justify-between p-2 rounded text-xs border ${
-                        isBp
-                          ? 'bg-blue-100 border-blue-300'
+                      className={`flex items-center justify-between p-2 rounded text-xs border transition-all ${
+                        isModified
+                          ? 'bg-yellow-100 border-yellow-500 border-2 animate-pulse'
+                          : isRead
+                          ? 'bg-orange-100 border-orange-500 border-2 animate-pulse'
+                          : isBp
+                          ? 'bg-blue-50 border-blue-300'
                           : isSp
                           ? 'bg-green-100 border-green-300'
                           : isValid
@@ -337,9 +412,13 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
                         </span>
                         {isBp && <span className="text-xs text-blue-600 font-semibold">BP</span>}
                         {isSp && <span className="text-xs text-green-600 font-semibold">SP</span>}
+                        {isModified && <span className="text-xs text-yellow-700 font-semibold animate-pulse">修改</span>}
+                        {isRead && <span className="text-xs text-orange-700 font-semibold animate-pulse">读取</span>}
                         {!isValid && <span className="text-xs text-gray-400">(已释放)</span>}
                       </div>
-                      <span className={`font-mono font-semibold ${isValid ? 'text-gray-900' : 'text-gray-400'}`}>
+                      <span className={`font-mono font-semibold ${
+                        isModified ? 'text-yellow-900' : isRead ? 'text-orange-900' : isValid ? 'text-gray-900' : 'text-gray-400'
+                      }`}>
                         {entry.value}
                       </span>
                     </div>
@@ -351,7 +430,7 @@ export const VmExecutor: React.FC<VmExecutorProps> = ({ assemblyCode }) => {
         </div>
 
         {/* 右侧：代码显示 */}
-        <div className="flex-1 overflow-auto bg-white" ref={codeContainerRef}>
+        <div className="w-1/2 overflow-auto bg-white" ref={codeContainerRef}>
           <div className="p-4 font-mono text-xs">
             {codeLines.map((line, index) => {
               const isCurrentLine = currentLine === index;

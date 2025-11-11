@@ -15,7 +15,8 @@ const PRESET_CODE_SAMPLES = [
   { 
     label: '基础指针操作', 
     value: `int add(int *p, int a) {
-  *p = a + *p;
+  int b = *p; 
+  *p = a + b;
   return;
 }
 

@@ -480,6 +480,9 @@ export class AssemblyGenerator {
         return this.generateBinaryExpression(expression, forCondition);
       case 'UnaryExpression':
         return this.generateUnaryExpression(expression);
+      case 'ParenthesizedExpression':
+        // 括号表达式：直接递归处理内部表达式
+        return this.generateExpression(expression.expression, forCondition);
       default:
         return null;
     }

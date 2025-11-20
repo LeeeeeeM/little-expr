@@ -529,6 +529,9 @@ export class AssemblyGenerator {
         return this.generateUnaryExpression(expression);
       case 'FunctionCall':
         return this.generateFunctionCall(expression);
+      case 'ParenthesizedExpression':
+        // 括号表达式：直接递归处理内部表达式
+        return this.generateExpression(expression.expression, forCondition);
       default:
         return null;
     }

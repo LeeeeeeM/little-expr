@@ -1,0 +1,44 @@
+// 标志位设置指令测试用例
+// 测试功能：
+// 1. 在表达式中使用比较运算符，生成 sete、setne、setl、setle、setg、setge 指令
+// 2. 测试所有比较运算符：==, !=, <, <=, >, >=
+// 3. 将比较结果赋值给变量，验证标志位设置指令的正确生成
+
+int main() {
+    int a = 10;
+    int b = 20;
+    int c = 10;
+    
+    // 测试相等比较：a == c (10 == 10) -> 应该生成 sete al，结果为 1
+    int eq_result = a == c;
+    
+    // 测试不等比较：a != b (10 != 20) -> 应该生成 setne al，结果为 1
+    int ne_result = a != b;
+    
+    // 测试小于比较：a < b (10 < 20) -> 应该生成 setl al，结果为 1
+    int lt_result = a < b;
+    
+    // 测试小于等于比较：a <= c (10 <= 10) -> 应该生成 setle al，结果为 1
+    int le_result = a <= c;
+    
+    // 测试大于比较：b > a (20 > 10) -> 应该生成 setg al，结果为 1
+    int gt_result = b > a;
+    
+    // 测试大于等于比较：c >= a (10 >= 10) -> 应该生成 setge al，结果为 1
+    int ge_result = c >= a;
+    
+    // 测试所有比较都为假的情况
+    int eq_false = a == b;      // 10 == 20 -> 0
+    int ne_false = a != c;      // 10 != 10 -> 0
+    int lt_false = b < a;       // 20 < 10 -> 0
+    int le_false = b <= a;      // 20 <= 10 -> 0
+    int gt_false = a > b;       // 10 > 20 -> 0
+    int ge_false = a >= b;      // 10 >= 20 -> 0
+    
+    // 在表达式中使用比较运算符
+    int sum = (a == c) + (a != b) + (a < b);  // 1 + 1 + 1 = 3
+    
+    // 返回所有结果的验证值（如果所有比较都正确，应该返回 3）
+    return sum;  // 应该返回 3
+}
+

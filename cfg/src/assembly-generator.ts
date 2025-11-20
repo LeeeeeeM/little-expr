@@ -511,6 +511,9 @@ export class AssemblyGenerator {
         return this.generateUnaryExpression(expression);
       case 'FunctionCall':
         return this.generateFunctionCall(expression);
+      case 'ParenthesizedExpression':
+        // 括号表达式：直接递归处理内部表达式
+        return this.generateExpression(expression.expression, forCondition);
       default:
         return null;
     }
@@ -560,9 +563,9 @@ export class AssemblyGenerator {
       case '-':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nsub eax, ebx`;
       case '*':
-        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nimul eax, ebx`;
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmul eax, ebx`;
       case '/':
-        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nidiv ebx`;
+        return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\ndiv eax, ebx`;
       case '%':
         return `${leftAsm}\npush eax\n${rightAsm}\nmov ebx, eax\npop eax\nmod eax, ebx`;
       case '==':

@@ -1,0 +1,32 @@
+// 括号表达式测试用例
+// 测试功能：
+// 1. 在表达式中使用括号，验证 ParenthesizedExpression 的正确处理
+// 2. 测试括号表达式在变量初始化中的使用
+// 3. 测试括号表达式在函数调用参数中的使用
+
+int calculate(int a, int b, int c) {
+    // 测试括号表达式：计算 (a == c) + (a != b) + (a < b)
+    int sum = (a == c) + (a != b) + (a < b);
+    return sum;
+}
+
+int main() {
+    int a = 10;
+    int b = 20;
+    int c = 10;
+    
+    // 测试括号表达式在变量初始化中
+    int eq_result = (a == c);      // 10 == 10 -> 1
+    int ne_result = (a != b);       // 10 != 20 -> 1
+    int lt_result = (a < b);        // 10 < 20 -> 1
+    
+    // 测试嵌套括号表达式
+    int nested = ((a + b) * 2) - c;  // ((10 + 20) * 2) - 10 = 50
+    
+    // 测试括号表达式在函数调用中
+    int result = calculate(a, b, c);  // 应该返回 3 (1 + 1 + 1)
+    
+    // 返回所有结果的验证值
+    return result;  // 应该返回 3
+}
+

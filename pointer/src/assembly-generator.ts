@@ -54,7 +54,7 @@ export class AssemblyGenerator {
     const entryBlock = cfg.blocks.find(b => b.isEntry);
     if (entryBlock) {
       this.visitBlock(entryBlock, null);
-        }
+    }
     
     return this.lines.join('\n');
   }

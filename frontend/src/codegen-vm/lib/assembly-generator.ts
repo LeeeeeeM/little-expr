@@ -8,7 +8,6 @@ export class AssemblyGenerator {
   private scopeManager: ScopeManager;
   private lines: string[] = [];
   public outputCallback?: (lines: string[]) => void; // 用于逐步输出
-  private currentFunctionName: string = '';
 
   constructor(scopeManager: ScopeManager) {
     this.scopeManager = scopeManager;
@@ -38,7 +37,6 @@ export class AssemblyGenerator {
     // 重置
     this.scopeManager.reset();
     this.lines = [];
-    this.currentFunctionName = cfg.functionName;
     
     // 重置所有块的 visited 标记和作用域快照
     for (const block of cfg.blocks) {
@@ -363,11 +361,6 @@ export class AssemblyGenerator {
       this.addLine(`  add esp, ${totalVarCount}`);
     }
     
-    // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
-    if (this.currentFunctionName !== 'main') {
-      this.addLine(`  pop ebp`);
-    }
-    
     // 清理寄存器
     this.addLine(`  mov ebx, 0`);
     this.addLine(`  ret`);
@@ -387,10 +380,7 @@ export class AssemblyGenerator {
       if (totalVarCount > 0) {
         this.addLine(`  add esp, ${totalVarCount}`);
       }
-      // 函数退出：恢复旧的 ebp（只有非 main 函数才需要）
-      if (this.currentFunctionName !== 'main') {
-        this.addLine(`  pop ebp`);
-      }
+
       this.addLine(`  mov eax, 0`);
       this.addLine(`  mov ebx, 0`);
       this.addLine(`  ret`);

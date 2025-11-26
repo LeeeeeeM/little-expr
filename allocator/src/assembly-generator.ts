@@ -309,9 +309,11 @@ export class AssemblyGenerator {
     } else {
       if (declaredSize > 1) {
         // 对于结构体，字段应该从高地址向低地址初始化
-        // baseOffset 指向结构体起始位置（最高地址）
-        // 第一个字段（i=0）应该在 baseOffset + (structSize - 1)
-        // 第二个字段（i=1）应该在 baseOffset + (structSize - 1 - 1)
+        // offset 指向结构体的最低地址（最远离 BP 的地址）
+        // 结构体的起始地址（最高地址）= offset + (structSize - 1)
+        // 第一个字段（i=0）在起始地址，即 offset + (structSize - 1)
+        // 第二个字段（i=1）在起始地址-1，即 offset + (structSize - 1 - 1)
+        // 公式：offset + (structSize - 1 - i)
         for (let i = 0; i < declaredSize; i++) {
           this.lines.push(`  mov eax, 0`);
           const fieldOffset = offset + (declaredSize - 1 - i);
@@ -411,25 +413,105 @@ export class AssemblyGenerator {
 
   private generateMemberAssignment(assignment: any): void {
     const member = assignment.target;
-    const valueAsm = this.generateExpression(assignment.value);
-    if (valueAsm) {
-      this.lines.push(...this.addIndentToMultiLine(valueAsm));
-    }
-
-    const offset = this.getMemberOffset(member);
-    if (offset !== null) {
-      this.lines.push(`  si ${offset}              ; 赋值给 ${member.object.name}.${member.field}`);
+    
+    if (member.isPointerAccess) {
+      // 通过指针赋值：ptr->x = value
+      // 1. 先计算要赋值的值，结果在 eax
+      const valueAsm = this.generateExpression(assignment.value);
+      if (valueAsm) {
+        this.lines.push(...this.addIndentToMultiLine(valueAsm));
+      }
+      
+      // 2. 保存值到栈（因为后面需要计算地址）
+      this.lines.push(`  push eax                   ; 保存要赋值的值`);
+      
+      // 3. 加载指针的值（地址）到 eax
+      const pointerOffset = this.getVariableOffsetForAssignment(member.object.name);
+      if (pointerOffset === null) {
+        this.lines.push(`  ; 未找到指针变量 ${member.object.name}`);
+        return;
+      }
+      this.lines.push(`  li ${pointerOffset}              ; 加载指针变量的值（地址）`);
+      
+      // 4. 计算字段的 offset
+      // 结构体指针指向起始地址（最高地址），字段从起始地址向低地址排列
+      // 字段 offset：第一个字段（fieldOffset=0）在起始地址，offset=0
+      //              第二个字段（fieldOffset=1）在起始地址-1，offset=-1
+      //              以此类推：offset = -fieldOffset
+      const fieldOffset = typeof member.fieldOffset === 'number' ? member.fieldOffset : 0;
+      const structFieldOffset = -fieldOffset;
+      
+      // 5. 将地址加上字段 offset
+      if (structFieldOffset !== 0) {
+        this.lines.push(`  push eax                   ; 保存结构体地址`);
+        this.lines.push(`  mov ebx, ${structFieldOffset}`);
+        this.lines.push(`  pop eax`);
+        this.lines.push(`  add eax, ebx               ; 计算字段地址 = 结构体地址 + 字段offset`);
+      }
+      
+      // 6. 将目标地址保存到 ebx，恢复值到 eax
+      this.lines.push(`  mov ebx, eax                ; 目标地址保存到 ebx`);
+      this.lines.push(`  pop eax                     ; 恢复要赋值的值到 eax`);
+      
+      // 7. 使用 sir 指令将值写入地址
+      this.lines.push(`  sir ebx                    ; 将值写入地址 ebx`);
+      this.lines.push(`  ; 赋值给 ${member.object.name}->${member.field}`);
     } else {
-      this.lines.push(`  ; 未找到结构体字段 ${member.object.name}.${member.field}`);
+      // 直接赋值：point.x = value
+      const valueAsm = this.generateExpression(assignment.value);
+      if (valueAsm) {
+        this.lines.push(...this.addIndentToMultiLine(valueAsm));
+      }
+
+      const offset = this.getMemberOffset(member);
+      if (offset !== null) {
+        this.lines.push(`  si ${offset}              ; 赋值给 ${member.object.name}.${member.field}`);
+      } else {
+        this.lines.push(`  ; 未找到结构体字段 ${member.object.name}.${member.field}`);
+      }
     }
   }
 
   private generateMemberExpression(member: any): string {
-    const offset = this.getMemberOffset(member);
-    if (offset === null) {
-      return 'mov eax, 0';
+    if (member.isPointerAccess) {
+      // 通过指针访问：ptr->x
+      // 1. 先加载指针的值（地址）到 eax
+      const pointerOffset = this.getVariableOffsetForAssignment(member.object.name);
+      if (pointerOffset === null) {
+        return 'mov eax, 0';
+      }
+      
+      // 2. 从指针变量中读取地址
+      const lines: string[] = [];
+      lines.push(`li ${pointerOffset}              ; 加载指针变量的值（地址）`);
+      
+      // 3. 计算字段的 offset（相对于结构体起始地址）
+      // 结构体指针指向起始地址（最高地址），字段从起始地址向低地址排列
+      // 字段 offset：第一个字段（fieldOffset=0）在起始地址，offset=0
+      //              第二个字段（fieldOffset=1）在起始地址-1，offset=-1
+      //              以此类推：offset = -fieldOffset
+      const fieldOffset = typeof member.fieldOffset === 'number' ? member.fieldOffset : 0;
+      const structFieldOffset = -fieldOffset;
+      
+      // 5. 将地址加上字段 offset，然后从该地址读取值
+      if (structFieldOffset !== 0) {
+        lines.push(`push eax                   ; 保存结构体地址`);
+        lines.push(`mov ebx, ${structFieldOffset}`);
+        lines.push(`pop eax`);
+        lines.push(`add eax, ebx               ; 计算字段地址 = 结构体地址 + 字段offset`);
+      }
+      lines.push(`lir eax                    ; 从地址读取字段值`);
+      
+      // 返回时不需要缩进，addIndentToMultiLine 会自动添加
+      return lines.join('\n');
+    } else {
+      // 直接访问：point.x
+      const offset = this.getMemberOffset(member);
+      if (offset === null) {
+        return 'mov eax, 0';
+      }
+      return `li ${offset}`;
     }
-    return `li ${offset}`;
   }
 
   private getMemberOffset(member: any): number | null {
@@ -446,10 +528,11 @@ export class AssemblyGenerator {
       return baseOffset + fieldOffset;
     }
     
-    // 对于结构体，baseOffset 指向结构体的起始位置（最高地址）
+    // 对于结构体，baseOffset 指向结构体的最低地址（最远离 BP 的地址）
+    // 结构体的起始地址（最高地址）= baseOffset + (structSize - 1)
     // 字段应该从高地址向低地址排列：
-    // - 第一个字段（fieldOffset=0）应该在 baseOffset + (structSize - 1)
-    // - 第二个字段（fieldOffset=1）应该在 baseOffset + (structSize - 1 - 1)
+    // - 第一个字段（fieldOffset=0）在起始地址，即 baseOffset + (structSize - 1)
+    // - 第二个字段（fieldOffset=1）在起始地址-1，即 baseOffset + (structSize - 1 - 1)
     // 公式：baseOffset + (structSize - 1 - fieldOffset)
     return baseOffset + (structSize - 1 - fieldOffset);
   }
@@ -802,7 +885,15 @@ export class AssemblyGenerator {
     const offset = this.scopeManager.getVariableOffset(varName);
     
     if (offset !== null) {
-      // 使用 lea 指令计算地址：lea offset（与 si、li 风格一致）
+      // 获取变量大小（对于结构体，需要计算起始地址）
+      const size = this.scopeManager.getVariableSize(varName);
+      if (size && size > 1) {
+        // 对于结构体，offset 指向最低地址（最远离 BP 的地址）
+        // 起始地址（最高地址）= offset + (size - 1)
+        const startOffset = offset + (size - 1);
+        return `lea ${startOffset}`;
+      }
+      // 对于普通变量（size = 1），offset 就是起始地址
       return `lea ${offset}`;
     }
     

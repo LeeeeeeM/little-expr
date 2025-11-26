@@ -179,8 +179,22 @@ export class StatementParser {
       case TokenType.IDENTIFIER:
         // 检查是否是赋值语句
         const nextToken = this.lexer.getNextToken();
+        // 检查是否是赋值语句：p = ... 或 p->x = ... 或 p.x = ...
         if (nextToken?.type === TokenType.ASSIGN) {
           return this.parseAssignmentStatement();
+        }
+        // 如果是 DOT 或 ARROW，可能是成员访问，需要进一步检查
+        if (nextToken?.type === TokenType.DOT || nextToken?.type === TokenType.ARROW) {
+          const thirdToken = this.lexer.peek(2);
+          // 如果是 p->x = ... 或 p.x = ...，需要检查第四个 token 是否是 ASSIGN
+          if (thirdToken?.type === TokenType.IDENTIFIER) {
+            const fourthToken = this.lexer.peek(3);
+            if (fourthToken?.type === TokenType.ASSIGN) {
+              return this.parseAssignmentStatement();
+            }
+          }
+          // 否则是表达式中的成员访问，如 p->x 或 p.x
+          return this.parseExpressionStatement();
         }
         return this.parseExpressionStatement();
       case TokenType.MUL:
@@ -309,10 +323,12 @@ export class StatementParser {
       target = result as DereferenceExpression;
     } else {
       // 普通赋值：p = ...
-      console.log('[parseAssignmentStatement] 普通赋值');
       target = this.parseIdentifier();
-      if (this.lexer.getCurrentToken()?.type === TokenType.DOT) {
-        target = this.parseMemberExpressionFromIdentifier(target);
+      const nextToken = this.lexer.getCurrentToken();
+      if (nextToken?.type === TokenType.DOT) {
+        target = this.parseMemberExpressionFromIdentifier(target, false);
+      } else if (nextToken?.type === TokenType.ARROW) {
+        target = this.parseMemberExpressionFromIdentifier(target, true);
       }
     }
     
@@ -340,14 +356,17 @@ export class StatementParser {
         this.addError('Struct type requires a name');
       }
 
+      // 允许结构体指针声明
       if (typeInfo.isPointer) {
-        this.addError('Pointer to struct is not supported yet');
-      }
-
-      if (!typeInfo.structDefinition) {
-        this.addError(`Struct '${typeInfo.structName || 'unknown'}' is not declared`);
+        // 结构体指针的大小是 1（指针本身）
+        structSize = 1;
       } else {
-        structSize = typeInfo.structDefinition.size;
+        // 结构体变量的大小是结构体定义的大小
+        if (!typeInfo.structDefinition) {
+          this.addError(`Struct '${typeInfo.structName || 'unknown'}' is not declared`);
+        } else {
+          structSize = typeInfo.structDefinition.size;
+        }
       }
 
       if (initializer) {
@@ -990,7 +1009,11 @@ export class StatementParser {
         }
 
         if (this.lexer.getCurrentToken()?.type === TokenType.DOT) {
-          return this.parseMemberExpressionFromIdentifier(identifier);
+          return this.parseMemberExpressionFromIdentifier(identifier, false);
+        }
+        
+        if (this.lexer.getCurrentToken()?.type === TokenType.ARROW) {
+          return this.parseMemberExpressionFromIdentifier(identifier, true);
         }
         
         return identifier;
@@ -1072,11 +1095,13 @@ export class StatementParser {
     const varName = token.value as string;
     
     // 检查下一个 token 是否是 '('，如果是，说明是函数调用，跳过变量检查
+    // 同时也检查是否是 ARROW 或 DOT，用于成员访问
     const nextToken = this.lexer.getNextToken();
     const isFunctionCall = nextToken?.type === TokenType.LEFTPAREN;
+    const isMemberAccess = nextToken?.type === TokenType.DOT || nextToken?.type === TokenType.ARROW;
     
-    // 如果不是函数调用，检查变量是否在作用域链中存在
-    if (!isFunctionCall) {
+    // 如果不是函数调用且不是成员访问，检查变量是否在作用域链中存在
+    if (!isFunctionCall && !isMemberAccess) {
       const variable = this.findVariableInScope(varName);
       if (!variable) {
         // 检查是否是函数（可能在作用域中）
@@ -1113,37 +1138,75 @@ export class StatementParser {
       }
     }
     
-    this.lexer.advance();
+    this.lexer.advance(); // 消耗 identifier token
     return ASTFactory.createIdentifier(varName);
   }
 
-  private parseMemberExpressionFromIdentifier(identifier: Identifier): MemberExpression {
-    this.expect(TokenType.DOT);
+  private parseMemberExpressionFromIdentifier(identifier: Identifier, isPointerAccess: boolean): MemberExpression {
+    if (isPointerAccess) {
+      this.expect(TokenType.ARROW);
+    } else {
+      this.expect(TokenType.DOT);
+    }
     const fieldName = this.parseIdentifierName();
-    const { structName, offset } = this.resolveStructField(identifier.name, fieldName);
+    const { structName, offset, structSize } = this.resolveStructField(identifier.name, fieldName, isPointerAccess);
     return ASTFactory.createMemberExpression(
       identifier,
       fieldName,
       offset,
       structName || identifier.name,
-      identifier.position
+      identifier.position,
+      isPointerAccess,
+      structSize
     );
   }
 
-  private resolveStructField(varName: string, fieldName: string): { structName: string; offset: number } {
+  private resolveStructField(varName: string, fieldName: string, isPointerAccess: boolean): { structName: string; offset: number; structSize: number } {
     const variable = this.findVariableInScope(varName);
-    if (!variable || variable.type !== DataType.STRUCT || !variable.structDefinition) {
-      this.addError(`Variable '${varName}' is not a struct`);
-      return { structName: varName, offset: 0 };
-    }
+    
+    if (isPointerAccess) {
+      // 通过指针访问，变量应该是指针类型
+      if (!variable || !variable.typeInfo?.isPointer) {
+        this.addError(`Variable '${varName}' is not a pointer`);
+        return { structName: varName, offset: 0, structSize: 0 };
+      }
+      
+      // 检查指针指向的是结构体类型
+      if (variable.typeInfo.baseType !== DataType.STRUCT || !variable.typeInfo.structDefinition) {
+        this.addError(`Pointer '${varName}' does not point to a struct`);
+        return { structName: varName, offset: 0, structSize: 0 };
+      }
+      
+      const field = variable.typeInfo.structDefinition.fields.find(f => f.name === fieldName);
+      if (!field) {
+        this.addError(`Struct '${variable.typeInfo.structDefinition.name}' does not have field '${fieldName}'`);
+        return { structName: variable.typeInfo.structDefinition.name, offset: 0, structSize: 0 };
+      }
+      
+      return { 
+        structName: variable.typeInfo.structDefinition.name, 
+        offset: field.offset,
+        structSize: variable.typeInfo.structDefinition.size
+      };
+    } else {
+      // 直接访问，变量应该是结构体类型
+      if (!variable || variable.type !== DataType.STRUCT || !variable.structDefinition) {
+        this.addError(`Variable '${varName}' is not a struct`);
+        return { structName: varName, offset: 0, structSize: 0 };
+      }
 
-    const field = variable.structDefinition.fields.find(f => f.name === fieldName);
-    if (!field) {
-      this.addError(`Struct '${variable.structDefinition.name}' does not have field '${fieldName}'`);
-      return { structName: variable.structDefinition.name, offset: 0 };
-    }
+      const field = variable.structDefinition.fields.find(f => f.name === fieldName);
+      if (!field) {
+        this.addError(`Struct '${variable.structDefinition.name}' does not have field '${fieldName}'`);
+        return { structName: variable.structDefinition.name, offset: 0, structSize: 0 };
+      }
 
-    return { structName: variable.structDefinition.name, offset: field.offset };
+      return { 
+        structName: variable.structDefinition.name, 
+        offset: field.offset,
+        structSize: variable.structDefinition.size
+      };
+    }
   }
 
   private parseIdentifierName(): string {

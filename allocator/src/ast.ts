@@ -52,6 +52,8 @@ export interface MemberExpression extends ASTNode {
   field: string;
   fieldOffset: number;
   structName: string;
+  isPointerAccess?: boolean;  // true 表示通过指针访问 (->)，false 表示直接访问 (.)
+  structSize?: number;  // 结构体大小，用于指针访问时计算字段地址
 }
 
 export interface FunctionCall extends ASTNode {
@@ -359,7 +361,9 @@ export class ASTFactory {
     field: string,
     fieldOffset: number,
     structName: string,
-    position?: number
+    position?: number,
+    isPointerAccess?: boolean,
+    structSize?: number
   ): MemberExpression {
     return {
       type: 'MemberExpression',
@@ -367,7 +371,9 @@ export class ASTFactory {
       field,
       fieldOffset,
       structName,
-      position
+      position,
+      isPointerAccess: isPointerAccess || false,
+      structSize
     };
   }
 

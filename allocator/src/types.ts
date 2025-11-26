@@ -112,6 +112,7 @@ export enum TokenType {
   ADDRESS_OF = 'ADDRESS_OF',          // & (取地址)
   DEREFERENCE = 'DEREFERENCE',         // * (解引用，在表达式中)
   POINTER = 'POINTER',                // * (在类型声明中，如 int *p)
+  ARROW = 'ARROW',                    // -> (指针成员访问)
   
   // 其他
   COMMA = 'COMMA',                    // ,

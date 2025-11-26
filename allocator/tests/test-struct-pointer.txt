@@ -1,0 +1,36 @@
+// 结构体指针测试用例
+// 测试功能：
+// 1. 结构体声明：struct Point { int x; int y; }
+// 2. 结构体指针声明：struct Point *ptr;
+// 3. 结构体变量和指针：struct Point point; struct Point *ptr;
+// 4. 通过指针访问成员：ptr->x, ptr->y
+// 5. 通过指针赋值：ptr->x = 10; ptr->y = 20;
+// 6. 指针赋值：ptr = &point;
+// 7. 通过指针修改结构体成员
+
+struct Point {
+  int x;
+  int y;
+  int z;
+};
+
+int main() {
+  struct Point point;
+  struct Point *ptr;
+  
+  // 初始化结构体变量
+  point.x = 1;
+  point.y = 2;
+  point.z = 3;
+  
+  // 将指针指向结构体变量
+  ptr = &point;
+  
+  // 通过指针访问和修改成员
+  ptr->x = 10;
+  ptr->y = 20;
+  
+  // 验证通过指针修改的值
+  // 应该返回 10 + 20 + 3 = 33
+  return ptr->x + point.y + ptr->z;
+}

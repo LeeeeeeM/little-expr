@@ -167,9 +167,15 @@ export class StatementLexer {
         break;
 
       case '-':
-        this.addToken(TokenType.SUB, '-');
-        this.position++;
-        this.column++;
+        if (nextChar === '>') {
+          this.addToken(TokenType.ARROW, '->');
+          this.position += 2;
+          this.column += 2;
+        } else {
+          this.addToken(TokenType.SUB, '-');
+          this.position++;
+          this.column++;
+        }
         break;
 
       case '*':

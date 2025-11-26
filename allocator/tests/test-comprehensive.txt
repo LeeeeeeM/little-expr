@@ -1,0 +1,113 @@
+// 终极综合测试：栈指针 + 堆分配 + 结构体 + 函数调用（传值/传指针）
+// 测试场景：
+// 1. 栈上变量的指针操作
+// 2. 堆上对象的分配和操作
+// 3. 真正的结构体定义和操作
+// 4. 结构体指针操作（堆上）
+// 5. 函数调用传值（不传指针）
+// 6. 函数调用传指针（修改堆数据）
+// 7. 函数调用传指针（修改栈数据）
+
+// 定义 Point 结构体
+struct Point {
+  int x;
+  int y;
+};
+
+// 定义 Rectangle 结构体
+struct Rectangle {
+  int width;
+  int height;
+};
+
+// 函数1: 传值调用 - 计算两数之和
+int add(int a, int b) {
+  return a + b;
+}
+
+// 函数2: 传指针调用 - 修改堆上的数据
+int setHeapValue(int* ptr, int value) {
+  *ptr = value;
+  return 0;
+}
+
+// 函数3: 传指针调用 - 修改栈上的数据
+int setStackValue(int* ptr, int value) {
+  *ptr = value;
+  return 0;
+}
+
+// 函数4: 传指针调用 - 读取数据
+int getValue(int* ptr) {
+  return *ptr;
+}
+
+int main() {
+  // === 场景1: 栈上变量和指针操作 ===
+  int stackVar = 10;           // 栈变量
+  int* stackPtr = &stackVar;   // 指向栈变量的指针
+  
+  // 通过指针读取栈变量
+  int val1 = *stackPtr;        // val1 = 10
+  
+  // 通过指针修改栈变量
+  *stackPtr = 20;              // stackVar = 20
+  int val2 = stackVar;         // val2 = 20
+  
+  // === 场景2: 堆上对象的分配和操作 ===
+  int* heapPtr = alloc(1);     // 在堆上分配1个int
+  *heapPtr = 30;               // 写入堆数据
+  int val3 = *heapPtr;         // 读取堆数据, val3 = 30
+  
+  // === 场景3: 使用 Point 结构体（栈上）===
+  struct Point p1;             // 声明 Point 结构体
+  p1.x = 5;                    // 初始化 x
+  p1.y = 8;                    // 初始化 y
+  int area1 = p1.x + p1.y;     // area1 = 13
+  
+  // === 场景4: Point 结构体指针操作 ===
+  struct Point* pPtr;    // 指向 Point 的指针
+  pPtr = &p1;
+  pPtr->x = 7;                 // 通过指针修改 x
+  int newX = pPtr->x;          // newX = 7
+  
+  // === 场景5: 使用 Rectangle 结构体（栈上）===
+  struct Rectangle rect1;      // 声明 Rectangle 结构体
+  rect1.width = 6;             // 初始化 width
+  rect1.height = 4;            // 初始化 height
+  int rectWidth = rect1.width; // rectWidth = 6
+  
+  // === 场景5.5: 堆上分配 Rectangle 结构体 ===
+  struct Rectangle* heapRect = alloc(2);  // 在堆上分配 Rectangle (2个int)
+  heapRect->width = 12;        // 设置 width
+  heapRect->height = 8;        // 设置 height
+  int heapRectArea = heapRect->width + heapRect->height;  // 20
+  
+  // === 场景6: 函数调用传值（不传指针）===
+  int sum1 = add(val1, val2);  // sum1 = 10 + 20 = 30
+  
+  // === 场景7: 函数调用传指针（修改堆数据）===
+  setHeapValue(heapPtr, 40);   // 修改堆数据为40
+  int val4 = getValue(heapPtr); // val4 = 40
+  
+  // === 场景8: 函数调用传指针（修改栈数据）===
+  setStackValue(stackPtr, 50); // 修改栈数据为50
+  int val5 = getValue(stackPtr); // val5 = 50
+  
+  // === 场景9: 修改栈上的 Rectangle 结构体 ===
+  rect1.width = 10;            // 修改 width 为 10
+  int newWidth = rect1.width;  // newWidth = 10
+  
+  // === 场景10: 混合计算 ===
+  int sum2 = add(val4, val5);  // sum2 = 40 + 50 = 90
+  int sum3 = add(area1, newX); // sum3 = 13 + 7 = 20
+  int sum4 = add(rectWidth, newWidth); // sum4 = 6 + 10 = 16
+  
+  // 清理堆内存
+  free(heapPtr);
+  free(heapRect);
+  
+  // 返回最终结果
+  // sum1 + sum2 + sum3 + sum4 + val3 + heapRectArea = 30 + 90 + 20 + 16 + 30 + 20 = 206
+  return sum1 + sum2 + sum3 + sum4 + val3 + heapRectArea;
+}

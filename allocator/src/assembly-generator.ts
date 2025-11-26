@@ -828,33 +828,64 @@ export class AssemblyGenerator {
 
   /**
    * 生成函数调用
+  /**
+   * 生成函数调用
    * 按照 C 调用约定：参数从右到左压栈，调用者清理栈
    */
-  private generateFunctionCall(funcCall: any): string {
-    const funcName = funcCall.callee.name;
-    const args = funcCall.arguments || [];
+  private generateFunctionCall(call: any): string {
+    // 兼容不同的 AST 结构：有些是 call.functionName，有些是 call.callee.name
+    const funcName = call.functionName || (call.callee && call.callee.name);
     
-    // 如果没有参数，直接调用
-    if (args.length === 0) {
-      return `call ${funcName}`;
+    if (!funcName) {
+      throw new Error('Function call missing function name');
     }
     
-    // 生成参数压栈代码（从右到左）
-    const pushInstructions: string[] = [];
-    for (let i = args.length - 1; i >= 0; i--) {
-      const argAsm = this.generateExpression(args[i]);
+    // 特殊处理 alloc 和 free
+    if (funcName === 'alloc') {
+      if (call.arguments.length !== 1) {
+        throw new Error('alloc requires exactly 1 argument');
+      }
+      const sizeAsm = this.generateExpression(call.arguments[0]);
+      if (!sizeAsm) return 'mov eax, 0';
+      
+      // alloc 隐式从 eax 读取参数
+      return `${sizeAsm}\nalloc`;
+    }
+    
+    if (funcName === 'free') {
+      if (call.arguments.length !== 1) {
+        throw new Error('free requires exactly 1 argument');
+      }
+      const ptrAsm = this.generateExpression(call.arguments[0]);
+      if (!ptrAsm) return 'mov eax, 0';
+      
+      // free 隐式从 eax 读取参数
+      return `${ptrAsm}\nfree`;
+    }
+
+    // 常规函数调用
+    const lines: string[] = [];
+    
+    // 1. 准备参数（从右向左压栈）
+    for (let i = call.arguments.length - 1; i >= 0; i--) {
+      const arg = call.arguments[i];
+      const argAsm = this.generateExpression(arg);
       if (argAsm) {
-        pushInstructions.push(argAsm);
-        pushInstructions.push('push eax');
+        lines.push(argAsm);
+        lines.push('push eax');
       }
     }
     
-    // 生成调用和栈清理代码
-    const callInstruction = `call ${funcName}`;
-    const cleanupInstruction = `add esp, ${args.length}  ; 清理 ${args.length} 个参数`;
+    // 2. 调用函数
+    lines.push(`call ${funcName}`);
     
-    // 组合所有指令
-    return pushInstructions.join('\n') + '\n' + callInstruction + '\n' + cleanupInstruction;
+    // 3. 清理参数栈
+    if (call.arguments.length > 0) {
+      lines.push(`add esp, ${call.arguments.length}`);
+    }
+    
+    // 返回值在 eax 中
+    return lines.join('\n');
   }
 
   /**

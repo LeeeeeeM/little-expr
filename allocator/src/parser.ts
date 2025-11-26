@@ -97,6 +97,23 @@ export class StatementParser {
       functions: new Map()
     };
 
+    // 注册内置函数
+    // alloc(size) -> int
+    globalScope.functions.set('alloc', {
+      name: 'alloc',
+      returnType: DataType.INT, // 返回地址（整数）
+      parameters: [{ name: 'size', type: DataType.INT }],
+      body: ASTFactory.createBlockStatement([]) as any
+    });
+
+    // free(ptr) -> void
+    globalScope.functions.set('free', {
+      name: 'free',
+      returnType: DataType.VOID,
+      parameters: [{ name: 'ptr', type: DataType.INT }],
+      body: ASTFactory.createBlockStatement([]) as any
+    });
+
     return {
       currentScope: globalScope,
       globalScope: globalScope
@@ -369,8 +386,11 @@ export class StatementParser {
         }
       }
 
-      if (initializer) {
-        this.addError('Struct initialization is not supported yet');
+      // 只有非指针的结构体才不允许初始化
+      // struct Point p1 = {...}; // 不允许
+      // struct Point* p1 = &p2;  // 允许（指针初始化）
+      if (initializer && !typeInfo.isPointer) {
+        this.addError('Struct value initialization is not supported yet. Use separate assignment statements.');
         initializer = undefined;
       }
     }

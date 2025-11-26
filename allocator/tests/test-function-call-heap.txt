@@ -1,0 +1,49 @@
+// 函数调用测试 - 堆分配结构体
+// 测试功能：
+// 1. 在堆上分配结构体
+// 2. 将指针传递给函数
+// 3. 在函数中修改堆上的数据
+// 4. 验证修改后的值
+
+// 辅助函数：初始化 Point
+int initPoint(int* p, int x, int y) {
+  *p = x;
+  // 注意：目前不支持指针算术，所以只能初始化第一个字段
+  // 在实际使用中，需要手动计算偏移量或使用结构体成员访问
+  return 0;
+}
+
+// 辅助函数：获取 Point 的 x 值
+int getX(int* p) {
+  return *p;
+}
+
+// 辅助函数：设置 Point 的 x 值
+int setX(int* p, int value) {
+  *p = value;
+  return 0;
+}
+
+int main() {
+  // 分配 2 个字节（模拟 struct Point { int x; int y; }）
+  int size = 2;
+  int* p = alloc(size);
+  
+  // 使用函数初始化
+  initPoint(p, 42, 0);
+  
+  // 读取值
+  int x1 = getX(p);
+  
+  // 修改值
+  setX(p, 100);
+  
+  // 再次读取
+  int x2 = getX(p);
+  
+  // 释放内存
+  free(p);
+  
+  // 返回 x1 + x2 = 42 + 100 = 142
+  return x1 + x2;
+}

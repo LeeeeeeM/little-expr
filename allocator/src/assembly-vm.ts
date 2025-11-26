@@ -1,6 +1,8 @@
 // 汇编虚拟机 - 运行 x86-64 汇编代码
 // 这是一个简化的虚拟机，支持基本的 x86-64 指令
 
+import { Allocator } from './allocator';
+
 export interface VMState {
   registers: Map<string, number>;
   memory: Map<number, number>;
@@ -26,6 +28,7 @@ export class AssemblyVM {
   private instructions: VMInstruction[] = [];
   private labels: Map<string, number> = new Map();
   private output: string[] = [];
+  private allocator: Allocator;
 
   constructor() {
     this.state = {
@@ -43,6 +46,10 @@ export class AssemblyVM {
       halted: false,
       cycles: 0
     };
+    
+    // 初始化分配器
+    this.allocator = new Allocator(this, HEAP_START);
+    this.allocator.init();
   }
 
   // 加载汇编代码
@@ -247,6 +254,12 @@ export class AssemblyVM {
         break;
       case 'call':
         this.call(operands[0]!);
+        break;
+      case 'alloc':
+        this.alloc();
+        break;
+      case 'free':
+        this.free();
         break;
       default:
         throw new Error(`Unknown instruction: ${opcode}`);
@@ -502,6 +515,21 @@ export class AssemblyVM {
     this.state.registers.set('ax', address);
   }
 
+  // alloc: 分配堆内存，从 eax 读取 size，返回地址到 eax
+  private alloc(): void {
+    const size = this.state.registers.get('ax') || 0;
+    const ptr = this.allocator.alloc(size);
+    console.log(`DEBUG: alloc(${size}) -> ${ptr}`);
+    this.state.registers.set('ax', ptr);
+  }
+
+  // free: 释放堆内存，从 eax 读取 ptr
+  private free(): void {
+    const ptr = this.state.registers.get('ax') || 0;
+    console.log(`DEBUG: free(${ptr})`);
+    this.allocator.free(ptr);
+  }
+
   // 辅助方法
   private getValue(operand: string): number {
     // 寄存器（包括 al, eax 等）
@@ -595,6 +623,9 @@ export class AssemblyVM {
     this.state.pc = 0;
     this.state.halted = false;
     this.state.cycles = 0;
+    
+    // Re-initialize allocator after clearing memory
+    this.allocator.init();
   }
 
   // 获取寄存器值（用于调试）
@@ -611,4 +642,16 @@ export class AssemblyVM {
   getState(): VMState {
     return { ...this.state };
   }
+
+  // 暴露给 Allocator 使用的内存访问接口
+  // 注意：在实际硬件中，内存是通过总线访问的，这里直接暴露方法模拟
+  public writeMemory(address: number, value: number): void {
+    this.state.memory.set(address, value);
+  }
+
+  public readMemory(address: number): number {
+    return this.state.memory.get(address) || 0;
+  }
 }
+
+export const HEAP_START = 4096;

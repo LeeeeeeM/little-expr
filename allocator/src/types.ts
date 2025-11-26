@@ -26,6 +26,7 @@ export enum StatementType {
   // 表达式语句
   EXPRESSION_STATEMENT = 'ExpressionStatement',
   ASSIGNMENT_STATEMENT = 'AssignmentStatement',
+  STRUCT_DECLARATION = 'StructDeclaration',
   
   // 声明语句
   VARIABLE_DECLARATION = 'VariableDeclaration',
@@ -55,6 +56,7 @@ export enum StatementType {
   IDENTIFIER = 'Identifier',
   BINARY_EXPRESSION = 'BinaryExpression',
   UNARY_EXPRESSION = 'UnaryExpression',
+  MEMBER_EXPRESSION = 'MemberExpression',
   FUNCTION_CALL = 'FunctionCall',
   PARENTHESIZED_EXPRESSION = 'ParenthesizedExpression'
 }
@@ -91,6 +93,7 @@ export enum TokenType {
   INT = 'INT',                        // int
   LET = 'LET',                        // let
   FUNCTION = 'FUNCTION',              // function
+  STRUCT = 'STRUCT',                  // struct
   
   // 比较操作符
   EQ = 'EQ',                          // ==
@@ -113,6 +116,7 @@ export enum TokenType {
   // 其他
   COMMA = 'COMMA',                    // ,
   COLON = 'COLON',                    // :
+  DOT = 'DOT',                        // .
 }
 
 // 数据类型枚举
@@ -121,7 +125,20 @@ export enum DataType {
   FLOAT = 'float',
   STRING = 'string',
   BOOLEAN = 'boolean',
-  VOID = 'void'
+  VOID = 'void',
+  STRUCT = 'struct'
+}
+
+export interface StructField {
+  name: string;
+  type: DataType;
+  offset: number;
+}
+
+export interface StructDefinition {
+  name: string;
+  fields: StructField[];
+  size: number;
 }
 
 // 类型信息（支持指针类型，包括多级指针）
@@ -129,6 +146,8 @@ export interface TypeInfo {
   baseType: DataType;  // 基础类型（如 int）
   isPointer: boolean;  // 是否为指针类型
   pointerLevel?: number;  // 指针级别（1 = int *, 2 = int **, 等）
+  structName?: string;
+  structDefinition?: StructDefinition;
 }
 
 // 变量信息
@@ -136,6 +155,8 @@ export interface VariableInfo {
   name: string;
   type: DataType;
   typeInfo?: TypeInfo;  // 类型信息（支持指针）
+  structName?: string;
+  structDefinition?: StructDefinition;
   value?: any;
   isInitialized: boolean;
   isTDZ?: boolean; // TDZ 标记

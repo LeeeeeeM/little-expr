@@ -2,6 +2,7 @@
 interface VariableInfo {
   offset: number;
   init: boolean; // 是否已初始化（声明过）：int 或 let 声明时设置为 true
+  size: number;
 }
 
 // 作用域管理器 - 简化设计，统一处理所有作用域
@@ -16,24 +17,27 @@ export class ScopeManager {
    * @param variableNames 该作用域内的变量名数组（按声明顺序）
    * @returns 返回分配的栈空间大小（变量数）
    */
-  enterScope(variableNames: string[]): number {
+  enterScope(variableNames: string[], variableSizes?: number[]): number {
     // 计算前面所有作用域的总变量数
     const prevScopeVarCount = this.getTotalPreviousVarCount();
-    
+    let cumulativeSize = 0;
+
     // 创建新作用域并分配 offset
     // 变量初始状态 init: false（还未声明/初始化）
     const newScope = new Map<string, VariableInfo>();
     for (let i = 0; i < variableNames.length; i++) {
       const varName = variableNames[i]!;
-      // offset = -(前面所有作用域的总变量数 + 本作用域内的顺序索引 + 1)
-      const offset = -(prevScopeVarCount + i + 1);
-      newScope.set(varName, { offset, init: false });
+      const size = Math.max(1, variableSizes?.[i] ?? 1);
+      // offset = -(前面所有作用域的总变量数 + 当前累积分配 + 当前变量大小)
+      const offset = -(prevScopeVarCount + cumulativeSize + size);
+      newScope.set(varName, { offset, init: false, size });
+      cumulativeSize += size;
     }
     
     // 压入作用域栈
     this.scopes.push(newScope);
     
-    return variableNames.length;
+    return cumulativeSize;
   }
   
   /**
@@ -51,7 +55,9 @@ export class ScopeManager {
   private getTotalPreviousVarCount(): number {
     let total = 0;
     for (const scope of this.scopes) {
-      total += scope.size;
+      for (const info of scope.values()) {
+        total += info.size;
+      }
     }
     return total;
   }
@@ -90,6 +96,38 @@ export class ScopeManager {
     const paramIndex = this.functionParameters.indexOf(name);
     if (paramIndex !== -1) {
       return paramIndex + 2; // 参数从 ebp+2 开始（跳过返回地址）
+    }
+    
+    return null;
+  }
+
+  /**
+   * 获取变量的 size
+   * 在生成代码时，变量应该已经在作用域中（通过 enterScope 分配）
+   * 只返回已初始化（init: true）的变量
+   */
+  getVariableSize(name: string): number | null {
+    // 首先检查for循环变量（for循环变量大小固定为1）
+    if (this.inForLoop && this.forLoopVariables.has(name)) {
+      return 1;
+    }
+    
+    // 从内层到外层查找，只匹配 init: true 的变量
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const scope = this.scopes[i];
+      if (scope && scope.has(name)) {
+        const info = scope.get(name)!;
+        if (info.init) {
+          return info.size;
+        }
+        // 如果当前作用域的变量未初始化，继续查找外层（作用域遮蔽规则）
+      }
+    }
+    
+    // 函数参数大小固定为1
+    const paramIndex = this.functionParameters.indexOf(name);
+    if (paramIndex !== -1) {
+      return 1;
     }
     
     return null;
@@ -191,7 +229,7 @@ export class ScopeManager {
     return this.scopes.map(scope => {
       const scopeCopy = new Map<string, VariableInfo>();
       for (const [name, info] of scope) {
-        scopeCopy.set(name, { offset: info.offset, init: info.init });
+        scopeCopy.set(name, { offset: info.offset, init: info.init, size: info.size });
       }
       return scopeCopy;
     });
@@ -209,7 +247,7 @@ export class ScopeManager {
     this.scopes = snapshot.map(scope => {
       const scopeCopy = new Map<string, VariableInfo>();
       for (const [name, info] of scope) {
-        scopeCopy.set(name, { offset: info.offset, init: info.init });
+        scopeCopy.set(name, { offset: info.offset, init: info.init, size: info.size });
       }
       return scopeCopy;
     });

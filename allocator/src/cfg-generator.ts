@@ -39,7 +39,7 @@ export interface BasicBlock {
   isEntry?: boolean;
   isExit?: boolean;
   visited?: boolean;  // 用于 DFS 遍历标记
-  scopeSnapshot?: Map<string, { offset: number; init: boolean }>[];  // 该块结束时的作用域快照
+  scopeSnapshot?: Map<string, { offset: number; init: boolean; size: number }>[];  // 该块结束时的作用域快照
 }
 
 export interface ControlFlowGraph {
@@ -960,7 +960,12 @@ export class CFGVisualizer {
         break;
       case StatementType.ASSIGNMENT_STATEMENT:
         const assignStmt = stmt as AssignmentStatement;
-        analysis.variables.add(assignStmt.target.name);
+        // target 可能是 Identifier, DereferenceExpression 或 MemberExpression
+        if (assignStmt.target.type === 'Identifier') {
+          analysis.variables.add(assignStmt.target.name);
+        } else if (assignStmt.target.type === 'MemberExpression') {
+          analysis.variables.add(assignStmt.target.object.name);
+        }
         this.analyzeExpression(assignStmt.value, analysis);
         break;
       case StatementType.EXPRESSION_STATEMENT:
@@ -1067,7 +1072,15 @@ export class CFGVisualizer {
         return `声明let变量 ${letDecl.name}`;
       case StatementType.ASSIGNMENT_STATEMENT:
         const assignStmt = stmt as AssignmentStatement;
-        return `赋值 ${assignStmt.target.name} = ${this.expressionToDisplayString(assignStmt.value)}`;
+        let targetStr = '';
+        if (assignStmt.target.type === 'Identifier') {
+          targetStr = assignStmt.target.name;
+        } else if (assignStmt.target.type === 'MemberExpression') {
+          targetStr = `${assignStmt.target.object.name}.${assignStmt.target.field}`;
+        } else if (assignStmt.target.type === 'DereferenceExpression') {
+          targetStr = '*...';
+        }
+        return `赋值 ${targetStr} = ${this.expressionToDisplayString(assignStmt.value)}`;
       case StatementType.RETURN_STATEMENT:
         return `返回语句`;
       case StatementType.IF_STATEMENT:

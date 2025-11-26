@@ -101,12 +101,18 @@ export class CheckpointTransformer {
     //    不包括嵌套 BlockStatement 内的变量
     //    注意：for 循环的 init 变量会在 transformForStatement 中创建独立作用域，不在这里收集
     const variableNames: string[] = [];
+    const variableSizes: number[] = [];
     for (const stmt of processedStatements) {
       if (stmt.type === 'VariableDeclaration' || stmt.type === 'LetDeclaration') {
         const varName = (stmt as any).name;
         if (varName && !variableNames.includes(varName)) {
           // 按声明顺序添加，避免重复
           variableNames.push(varName);
+          if (stmt.type === 'VariableDeclaration') {
+            variableSizes.push((stmt as any).structSize || 1);
+          } else {
+            variableSizes.push(1);
+          }
         }
       }
       // 注意：嵌套的 BlockStatement 已经被包裹了 StartCheckPoint/EndCheckPoint
@@ -120,9 +126,9 @@ export class CheckpointTransformer {
     return {
       ...blockStmt,
       statements: [
-        ASTFactory.createStartCheckPoint(scopeId, currentDepth, variableNames),
+        ASTFactory.createStartCheckPoint(scopeId, currentDepth, variableNames, undefined, variableSizes),
         ...processedStatements,
-        ASTFactory.createEndCheckPoint(scopeId, currentDepth, variableNames)
+        ASTFactory.createEndCheckPoint(scopeId, currentDepth, variableNames, undefined, variableSizes)
       ]
     };
   }
@@ -165,11 +171,17 @@ export class CheckpointTransformer {
   ): ForStatement {
     // 1. 收集 init 中的变量（如果是变量声明）
     const initVariableNames: string[] = [];
+    const initVariableSizes: number[] = [];
     if (forStmt.init) {
       if (forStmt.init.type === 'VariableDeclaration' || forStmt.init.type === 'LetDeclaration') {
         const varName = (forStmt.init as any).name;
         if (varName) {
           initVariableNames.push(varName);
+          if (forStmt.init.type === 'VariableDeclaration') {
+            initVariableSizes.push(((forStmt.init as any).structSize) || 1);
+          } else {
+            initVariableSizes.push(1);
+          }
         }
       }
     }
@@ -196,9 +208,9 @@ export class CheckpointTransformer {
       const wrappedBody: BlockStatement = {
         type: 'BlockStatement',
         statements: [
-          ASTFactory.createStartCheckPoint(scopeId, forLoopScopeDepth, initVariableNames),
+          ASTFactory.createStartCheckPoint(scopeId, forLoopScopeDepth, initVariableNames, undefined, initVariableSizes),
           ...bodyStatements,
-          ASTFactory.createEndCheckPoint(scopeId, forLoopScopeDepth, initVariableNames)
+          ASTFactory.createEndCheckPoint(scopeId, forLoopScopeDepth, initVariableNames, undefined, initVariableSizes)
         ]
       };
       

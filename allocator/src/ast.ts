@@ -46,6 +46,14 @@ export interface DereferenceExpression extends ASTNode {
   operand: Expression;
 }
 
+export interface MemberExpression extends ASTNode {
+  type: 'MemberExpression';
+  object: Identifier;
+  field: string;
+  fieldOffset: number;
+  structName: string;
+}
+
 export interface FunctionCall extends ASTNode {
   type: 'FunctionCall';
   callee: Identifier;
@@ -66,7 +74,8 @@ export type Expression =
   | FunctionCall 
   | ParenthesizedExpression
   | AddressOfExpression
-  | DereferenceExpression;
+  | DereferenceExpression
+  | MemberExpression;
 
 // 语句节点
 export interface ExpressionStatement extends ASTNode {
@@ -76,7 +85,7 @@ export interface ExpressionStatement extends ASTNode {
 
 export interface AssignmentStatement extends ASTNode {
   type: 'AssignmentStatement';
-  target: Identifier | DereferenceExpression;  // 支持 *p = 123 这种解引用赋值
+  target: Identifier | DereferenceExpression | MemberExpression;  // 支持 *p = 123 或结构体字段赋值
   value: Expression;
 }
 
@@ -85,6 +94,8 @@ export interface VariableDeclaration extends ASTNode {
   name: string;
   dataType: DataType;
   initializer?: Expression;
+  structName?: string;
+  structSize?: number;
 }
 
 export interface LetDeclaration extends ASTNode {
@@ -101,6 +112,12 @@ export interface FunctionDeclaration extends ASTNode {
   parameters: Array<{ name: string; type: DataType }>;
   body: BlockStatement;
   isDeclaration?: boolean; // true 表示函数声明（只有声明，没有定义），false 或 undefined 表示函数定义
+}
+
+export interface StructDeclaration extends ASTNode {
+  type: 'StructDeclaration';
+  name: string;
+  fields: Array<{ name: string; type: DataType }>;
 }
 
 export interface IfStatement extends ASTNode {
@@ -152,6 +169,7 @@ export interface StartCheckPoint extends ASTNode {
   scopeId: string;        // 唯一标识，用于与 EndCheckPoint 配对
   depth: number;          // 嵌套深度（可选，用于调试）
   variableNames: string[];  // 该作用域内直接声明的变量名数组（按声明顺序）
+  variableSizes: number[];
 }
 
 export interface EndCheckPoint extends ASTNode {
@@ -159,12 +177,14 @@ export interface EndCheckPoint extends ASTNode {
   scopeId: string;        // 对应 StartCheckPoint 的 scopeId
   depth: number;          // 必须与对应的 StartCheckPoint 一致
   variableNames: string[];  // 必须与对应的 StartCheckPoint 一致（用于验证）
+  variableSizes: number[];
 }
 
 // 语句联合类型
 export type Statement = 
   | ExpressionStatement
   | AssignmentStatement
+  | StructDeclaration
   | VariableDeclaration
   | LetDeclaration
   | FunctionDeclaration
@@ -289,7 +309,7 @@ export class ASTFactory {
   }
 
   static createAssignmentStatement(
-    target: Identifier | DereferenceExpression, 
+    target: Identifier | DereferenceExpression | MemberExpression, 
     value: Expression, 
     position?: number
   ): AssignmentStatement {
@@ -305,14 +325,17 @@ export class ASTFactory {
     name: string, 
     dataType: DataType, 
     initializer?: Expression, 
-    position?: number
+    position?: number,
+    options?: { structName?: string; structSize?: number }
   ): VariableDeclaration {
     return {
       type: 'VariableDeclaration',
       name,
       dataType,
       initializer,
-      position
+      position,
+      structName: options?.structName,
+      structSize: options?.structSize
     };
   }
 
@@ -327,6 +350,23 @@ export class ASTFactory {
       name,
       dataType,
       initializer,
+      position
+    };
+  }
+
+  static createMemberExpression(
+    object: Identifier,
+    field: string,
+    fieldOffset: number,
+    structName: string,
+    position?: number
+  ): MemberExpression {
+    return {
+      type: 'MemberExpression',
+      object,
+      field,
+      fieldOffset,
+      structName,
       position
     };
   }
@@ -347,6 +387,19 @@ export class ASTFactory {
       body,
       position,
       isDeclaration
+    };
+  }
+
+  static createStructDeclaration(
+    name: string,
+    fields: Array<{ name: string; type: DataType }>,
+    position?: number
+  ): StructDeclaration {
+    return {
+      type: 'StructDeclaration',
+      name,
+      fields,
+      position
     };
   }
 
@@ -442,13 +495,15 @@ export class ASTFactory {
     scopeId: string,
     depth: number,
     variableNames: string[],
-    position?: number
+    position?: number,
+    variableSizes?: number[]
   ): StartCheckPoint {
     return {
       type: 'StartCheckPoint',
       scopeId,
       depth,
       variableNames,
+      variableSizes: variableSizes || variableNames.map(() => 1),
       position
     };
   }
@@ -457,13 +512,15 @@ export class ASTFactory {
     scopeId: string,
     depth: number,
     variableNames: string[],
-    position?: number
+    position?: number,
+    variableSizes?: number[]
   ): EndCheckPoint {
     return {
       type: 'EndCheckPoint',
       scopeId,
       depth,
       variableNames,
+      variableSizes: variableSizes || variableNames.map(() => 1),
       position
     };
   }

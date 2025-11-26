@@ -3,7 +3,7 @@
 
 import { StatementLexer } from './lexer';
 import type { Token } from './lexer';
-import { TokenType, DataType, type TypeInfo } from './types';
+import { TokenType, DataType, type TypeInfo, type StructDefinition } from './types';
 import type { ParseResult, ParseError, ParseContext, Scope, VariableInfo, FunctionInfo } from './types';
 import { 
   ASTFactory,
@@ -30,7 +30,9 @@ import {
   type EmptyStatement,
   type FunctionDeclaration,
   type AddressOfExpression,
-  type DereferenceExpression
+  type DereferenceExpression,
+  type MemberExpression,
+  type StructDeclaration
 } from './ast';
 
 // TDZ 检查器类
@@ -75,11 +77,13 @@ export class StatementParser {
   private warnings: ParseError[] = [];
   private context: ParseContext;
   private tdzChecker: TDZChecker; // 添加 TDZ 检查器
+  private structDefinitions: Map<string, StructDefinition>;
 
   constructor(source: string) {
     this.lexer = new StatementLexer(source);
     this.context = this.createInitialContext();
     this.tdzChecker = new TDZChecker(); // 初始化 TDZ 检查器
+    this.structDefinitions = new Map();
   }
 
   // 获取解析器上下文
@@ -144,6 +148,11 @@ export class StatementParser {
           if (thirdToken?.type === TokenType.LEFTPAREN) {
             return this.parseFunctionDeclaration();
           }
+        }
+        return this.parseVariableDeclaration();
+      case TokenType.STRUCT:
+        if (this.isStructDeclaration()) {
+          return this.parseStructDeclaration();
         }
         return this.parseVariableDeclaration();
       case TokenType.LET:
@@ -214,6 +223,12 @@ export class StatementParser {
     }
   }
 
+  private isStructDeclaration(): boolean {
+    const nextToken = this.lexer.getNextToken();
+    const thirdToken = this.lexer.peek(2);
+    return nextToken?.type === TokenType.IDENTIFIER && thirdToken?.type === TokenType.LBRACE;
+  }
+
   private parseExpressionStatement(): ExpressionStatement {
     const expression = this.parseExpression();
     this.expectSemicolon();
@@ -223,7 +238,7 @@ export class StatementParser {
   private parseAssignmentStatement(): AssignmentStatement {
     // 检查是否是解引用赋值 *p = ..., **pp = ..., ***ppp = ...（支持任意级别）
     const token = this.lexer.getCurrentToken();
-    let target: Identifier | DereferenceExpression;
+    let target: Identifier | DereferenceExpression | MemberExpression;
     
     console.log('[parseAssignmentStatement] 开始解析赋值语句，当前 token:', token?.type);
     
@@ -296,6 +311,9 @@ export class StatementParser {
       // 普通赋值：p = ...
       console.log('[parseAssignmentStatement] 普通赋值');
       target = this.parseIdentifier();
+      if (this.lexer.getCurrentToken()?.type === TokenType.DOT) {
+        target = this.parseMemberExpressionFromIdentifier(target);
+      }
     }
     
     this.expect(TokenType.ASSIGN);
@@ -316,18 +334,103 @@ export class StatementParser {
       initializer = this.parseExpression();
     }
 
+    let structSize: number | undefined;
+    if (typeInfo.baseType === DataType.STRUCT) {
+      if (!typeInfo.structName) {
+        this.addError('Struct type requires a name');
+      }
+
+      if (typeInfo.isPointer) {
+        this.addError('Pointer to struct is not supported yet');
+      }
+
+      if (!typeInfo.structDefinition) {
+        this.addError(`Struct '${typeInfo.structName || 'unknown'}' is not declared`);
+      } else {
+        structSize = typeInfo.structDefinition.size;
+      }
+
+      if (initializer) {
+        this.addError('Struct initialization is not supported yet');
+        initializer = undefined;
+      }
+    }
+
     this.expectSemicolon();
 
-    // 添加到当前作用域
+    const variableValue = initializer && typeInfo.baseType !== DataType.STRUCT
+      ? this.evaluateExpression(initializer)
+      : undefined;
+
     this.context.currentScope.variables.set(name, {
       name,
       type: typeInfo.baseType,
-      typeInfo, // 保存类型信息（包括是否为指针）
-      value: initializer ? this.evaluateExpression(initializer) : undefined,
-      isInitialized: !!initializer
+      typeInfo,
+      structName: typeInfo.structName,
+      structDefinition: typeInfo.structDefinition,
+      value: variableValue,
+      isInitialized: typeInfo.baseType === DataType.STRUCT ? true : !!initializer
     });
 
-    return ASTFactory.createVariableDeclaration(name, typeInfo.baseType, initializer);
+    return ASTFactory.createVariableDeclaration(
+      name,
+      typeInfo.baseType,
+      initializer,
+      undefined,
+      {
+        structName: typeInfo.structName,
+        structSize
+      }
+    );
+  }
+
+  private parseStructDeclaration(): StructDeclaration {
+    this.expect(TokenType.STRUCT);
+    const structName = this.parseIdentifierName();
+    this.expect(TokenType.LBRACE);
+
+    const fieldsForAst: Array<{ name: string; type: DataType }> = [];
+    const structFields: StructDefinition['fields'] = [];
+    const fieldNames = new Set<string>();
+    let offset = 0;
+
+    while (this.lexer.getCurrentToken()?.type !== TokenType.RBRACE && !this.lexer.isAtEnd()) {
+      const fieldTypeToken = this.lexer.getCurrentToken();
+      if (fieldTypeToken?.type !== TokenType.INT) {
+        this.addError(`Struct fields currently only support 'int', got ${fieldTypeToken?.type || 'EOF'}`);
+        this.lexer.advance();
+        continue;
+      }
+
+      this.lexer.advance(); // consume 'int'
+      const fieldName = this.parseIdentifierName();
+      if (fieldNames.has(fieldName)) {
+        this.addError(`Duplicate field '${fieldName}' in struct '${structName}'`);
+      } else {
+        fieldNames.add(fieldName);
+        fieldsForAst.push({ name: fieldName, type: DataType.INT });
+        structFields.push({ name: fieldName, type: DataType.INT, offset });
+        offset++;
+      }
+
+      this.expectSemicolon();
+    }
+
+    this.expect(TokenType.RBRACE);
+    this.expectSemicolon();  // C 标准要求结构体定义后必须加分号
+
+    const structDef: StructDefinition = {
+      name: structName,
+      fields: structFields,
+      size: offset
+    };
+
+    if (this.structDefinitions.has(structName)) {
+      this.addWarning(`Struct '${structName}' redefined, previous definition will be overwritten`);
+    }
+
+    this.structDefinitions.set(structName, structDef);
+    return ASTFactory.createStructDeclaration(structName, fieldsForAst);
   }
 
   private parseLetDeclaration(): LetDeclaration {
@@ -885,6 +988,10 @@ export class StatementParser {
         if (this.lexer.getCurrentToken()?.type === TokenType.LEFTPAREN) {
           return this.parseFunctionCall(identifier);
         }
+
+        if (this.lexer.getCurrentToken()?.type === TokenType.DOT) {
+          return this.parseMemberExpressionFromIdentifier(identifier);
+        }
         
         return identifier;
         
@@ -1010,6 +1117,35 @@ export class StatementParser {
     return ASTFactory.createIdentifier(varName);
   }
 
+  private parseMemberExpressionFromIdentifier(identifier: Identifier): MemberExpression {
+    this.expect(TokenType.DOT);
+    const fieldName = this.parseIdentifierName();
+    const { structName, offset } = this.resolveStructField(identifier.name, fieldName);
+    return ASTFactory.createMemberExpression(
+      identifier,
+      fieldName,
+      offset,
+      structName || identifier.name,
+      identifier.position
+    );
+  }
+
+  private resolveStructField(varName: string, fieldName: string): { structName: string; offset: number } {
+    const variable = this.findVariableInScope(varName);
+    if (!variable || variable.type !== DataType.STRUCT || !variable.structDefinition) {
+      this.addError(`Variable '${varName}' is not a struct`);
+      return { structName: varName, offset: 0 };
+    }
+
+    const field = variable.structDefinition.fields.find(f => f.name === fieldName);
+    if (!field) {
+      this.addError(`Struct '${variable.structDefinition.name}' does not have field '${fieldName}'`);
+      return { structName: variable.structDefinition.name, offset: 0 };
+    }
+
+    return { structName: variable.structDefinition.name, offset: field.offset };
+  }
+
   private parseIdentifierName(): string {
     const token = this.lexer.getCurrentToken();
     if (token?.type !== TokenType.IDENTIFIER) {
@@ -1032,7 +1168,28 @@ export class StatementParser {
 
   // 解析类型信息（支持指针类型，包括多级指针）
   private parseTypeInfo(): TypeInfo {
-    const baseType = this.parseDataType();
+    let baseType: DataType;
+    let structName: string | undefined;
+    let structDefinition: StructDefinition | undefined;
+
+    const token = this.lexer.getCurrentToken();
+    if (token?.type === TokenType.STRUCT) {
+      this.lexer.advance(); // 跳过 struct
+      const nameToken = this.lexer.getCurrentToken();
+      if (nameToken?.type !== TokenType.IDENTIFIER) {
+        throw new Error(`Expected struct name, got ${nameToken?.type || 'EOF'}`);
+      }
+      structName = nameToken.value as string;
+      this.lexer.advance();
+      baseType = DataType.STRUCT;
+      structDefinition = this.structDefinitions.get(structName);
+      if (!structDefinition) {
+        this.addError(`Struct '${structName}' is not declared`);
+      }
+    } else {
+      baseType = this.parseDataType();
+    }
+
     let pointerLevel = 0;
     
     // 检查是否有 *（指针类型），支持多级指针如 int *, int **, int ***, ...（任意级别）
@@ -1042,37 +1199,39 @@ export class StatementParser {
     // 循环处理所有连续的 * 和 ** token
     console.log('[parseTypeInfo] 开始解析类型信息，baseType:', baseType);
     while (true) {
-      const token = this.lexer.getCurrentToken();
-      if (!token) {
+      const nextToken = this.lexer.getCurrentToken();
+      if (!nextToken) {
         console.log('[parseTypeInfo] token 为空，退出循环');
         break;
       }
       
-      console.log('[parseTypeInfo] 当前 token:', token.type, token.value, 'pointerLevel:', pointerLevel);
+      console.log('[parseTypeInfo] 当前 token:', nextToken.type, nextToken.value, 'pointerLevel:', pointerLevel);
       
       // 只处理 MUL 和 POWER token，其他 token（如 IDENTIFIER）表示指针声明结束
-      if (token.type === TokenType.MUL) {
+      if (nextToken.type === TokenType.MUL) {
         console.log('[parseTypeInfo] 遇到 MUL，pointerLevel++');
         this.lexer.advance(); // 跳过 *
         pointerLevel++;
         // 继续循环，可能还有更多的 * 或 **
-      } else if (token.type === TokenType.POWER) {
+      } else if (nextToken.type === TokenType.POWER) {
         console.log('[parseTypeInfo] 遇到 POWER，pointerLevel += 2');
-        // ** 在类型声明中应该被视为两个指针级别
         this.lexer.advance(); // 跳过 **
         pointerLevel += 2;
         console.log('[parseTypeInfo] 处理 POWER 后，pointerLevel:', pointerLevel, '下一个 token:', this.lexer.getCurrentToken()?.type);
-        // 继续循环，可能还有更多的 * 或 **（例如 *** 的情况）
       } else {
-        // 遇到非指针符号（如 IDENTIFIER），停止解析
-        // 此时 lexer 的当前位置应该指向标识符
-        console.log('[parseTypeInfo] 遇到非指针符号:', token.type, '停止解析，pointerLevel:', pointerLevel);
+        console.log('[parseTypeInfo] 遇到非指针符号:', nextToken.type, '停止解析，pointerLevel:', pointerLevel);
         break;
       }
     }
     
     console.log('[parseTypeInfo] 解析完成，pointerLevel:', pointerLevel, '下一个 token:', this.lexer.getCurrentToken()?.type);
-    return { baseType, isPointer: pointerLevel > 0, pointerLevel: pointerLevel > 0 ? pointerLevel : undefined };
+    return { 
+      baseType, 
+      isPointer: pointerLevel > 0, 
+      pointerLevel: pointerLevel > 0 ? pointerLevel : undefined,
+      structName,
+      structDefinition
+    };
   }
 
   private parseParameterList(): Array<{ name: string; type: DataType }> {
@@ -1081,12 +1240,18 @@ export class StatementParser {
     if (this.lexer.getCurrentToken()?.type !== TokenType.RIGHTPAREN) {
       const typeInfo = this.parseTypeInfo(); // 支持指针类型参数
       const name = this.parseIdentifierName();
+      if (typeInfo.baseType === DataType.STRUCT) {
+        this.addError('Struct parameters are not supported yet');
+      }
       parameters.push({ name, type: typeInfo.baseType });
       
       while (this.lexer.getCurrentToken()?.type === TokenType.COMMA) {
         this.lexer.advance();
         const paramTypeInfo = this.parseTypeInfo(); // 支持指针类型参数
         const paramName = this.parseIdentifierName();
+        if (paramTypeInfo.baseType === DataType.STRUCT) {
+          this.addError('Struct parameters are not supported yet');
+        }
         parameters.push({ name: paramName, type: paramTypeInfo.baseType });
       }
     }
@@ -1160,6 +1325,10 @@ export class StatementParser {
           case '!': return !operand;
           default: return operand;
         }
+      case 'AddressOfExpression':
+      case 'DereferenceExpression':
+      case 'MemberExpression':
+        return 0;
       default:
         return 0;
     }

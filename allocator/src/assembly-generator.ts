@@ -64,7 +64,7 @@ export class AssemblyGenerator {
    * @param block 当前块
    * @param incomingSnapshot 进入该块时应该的作用域快照（null 表示首次访问）
    */
-  private visitBlock(block: BasicBlock, incomingSnapshot: Map<string, { offset: number; init: boolean }>[] | null): void {
+  private visitBlock(block: BasicBlock, incomingSnapshot: Map<string, { offset: number; init: boolean; size: number }>[] | null): void {
     // 如果已经访问过，验证作用域栈一致性
     if (block.visited) {
       // 出口块不验证快照（因为可能是不同路径汇聚的死代码点）
@@ -142,9 +142,9 @@ export class AssemblyGenerator {
       // 注意：每个后继块都会接收这个快照，并在 visitBlock 开始时恢复它
       // 所以即使 scopeManager 在前一个后继块中被修改了，下一个后继块访问时会自动恢复
       const snapshotCopy = currentSnapshot.map(scope => {
-        const scopeCopy = new Map<string, { offset: number; init: boolean }>();
+        const scopeCopy = new Map<string, { offset: number; init: boolean; size: number }>();
         for (const [name, info] of scope) {
-          scopeCopy.set(name, { offset: info.offset, init: info.init });
+          scopeCopy.set(name, { offset: info.offset, init: info.init, size: info.size });
         }
         return scopeCopy;
       });
@@ -201,15 +201,15 @@ export class AssemblyGenerator {
    * 处理 StartCheckPoint：进入新作用域
    */
   private handleStartCheckPoint(checkPoint: StartCheckPoint): void {
-    const varCount = checkPoint.variableNames.length;
+    const allocationSize = this.getScopeAllocationSize(checkPoint);
     
     // 进入作用域（分配变量并计算 offset）
-    const allocatedSize = this.scopeManager.enterScope(checkPoint.variableNames);
+    this.scopeManager.enterScope(checkPoint.variableNames, checkPoint.variableSizes);
     
     // 生成栈分配指令
-    if (varCount > 0) {
+    if (allocationSize > 0) {
       const varList = checkPoint.variableNames.join(', ');
-      this.lines.push(`  sub esp, ${varCount}            ; 进入作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, vars: [${varList}])`);
+      this.lines.push(`  sub esp, ${allocationSize}            ; 进入作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, vars: [${varList}])`);
     } else {
       this.lines.push(`  ; 进入作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, 无变量)`);
     }
@@ -220,11 +220,12 @@ export class AssemblyGenerator {
    */
   private handleEndCheckPoint(checkPoint: EndCheckPoint): void {
     const varCount = checkPoint.variableNames.length;
+    const allocationSize = this.getScopeAllocationSize(checkPoint);
     
     // 验证变量名是否一致（可选，用于调试）
     // 注意：由于 DFS 遍历可能在不同路径访问同一个块，作用域栈的状态可能不匹配
     // 所以这个验证可能不够准确，仅用于调试
-    const scopes = (this.scopeManager as any).scopes as Map<string, { offset: number; init: boolean }>[];
+    const scopes = (this.scopeManager as any).scopes as Map<string, { offset: number; init: boolean; size: number }>[];
     const currentScope = this.scopeManager.getCurrentScope();
     if (currentScope) {
       const currentVarNames = Array.from(currentScope.keys());
@@ -273,9 +274,9 @@ export class AssemblyGenerator {
     this.scopeManager.exitScope();
     
     // 生成栈释放指令
-    if (varCount > 0) {
+    if (allocationSize > 0) {
       const varList = checkPoint.variableNames.join(', ');
-      this.lines.push(`  add esp, ${varCount}            ; 退出作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, vars: [${varList}])`);
+      this.lines.push(`  add esp, ${allocationSize}            ; 退出作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, vars: [${varList}])`);
     } else {
       this.lines.push(`  ; 退出作用域 ${checkPoint.scopeId} (depth: ${checkPoint.depth}, 无变量)`);
     }
@@ -296,6 +297,8 @@ export class AssemblyGenerator {
       throw new Error(`变量 ${varName} 不在作用域中`);
       }
     
+    const declaredSize = varDecl.structSize || 1;
+
     // 生成初始化代码
     if (varDecl.initializer) {
       const valueAsm = this.generateExpression(varDecl.initializer);
@@ -304,8 +307,20 @@ export class AssemblyGenerator {
       }
       this.lines.push(`  si ${offset}              ; 初始化 ${varName}`);
     } else {
-      this.lines.push(`  mov eax, 0`);
-      this.lines.push(`  si ${offset}              ; 初始化 ${varName}`);
+      if (declaredSize > 1) {
+        // 对于结构体，字段应该从高地址向低地址初始化
+        // baseOffset 指向结构体起始位置（最高地址）
+        // 第一个字段（i=0）应该在 baseOffset + (structSize - 1)
+        // 第二个字段（i=1）应该在 baseOffset + (structSize - 1 - 1)
+        for (let i = 0; i < declaredSize; i++) {
+          this.lines.push(`  mov eax, 0`);
+          const fieldOffset = offset + (declaredSize - 1 - i);
+          this.lines.push(`  si ${fieldOffset}              ; 初始化 ${varName}.${i}`);
+        }
+      } else {
+        this.lines.push(`  mov eax, 0`);
+        this.lines.push(`  si ${offset}              ; 初始化 ${varName}`);
+      }
     }
   }
 
@@ -324,6 +339,10 @@ export class AssemblyGenerator {
     if (assignment.target.type === 'DereferenceExpression') {
       // 解引用赋值：*p = value
       this.generateDereferenceAssignment(assignment);
+      return;
+    }
+    if (assignment.target.type === 'MemberExpression') {
+      this.generateMemberAssignment(assignment);
       return;
     }
     
@@ -389,6 +408,51 @@ export class AssemblyGenerator {
     const levelDesc = derefLevel > 1 ? `${derefLevel}级` : '';
     this.lines.push(`  sir ebx                    ; ${levelDesc}解引用赋值（间接寻址写入）`);
   }
+
+  private generateMemberAssignment(assignment: any): void {
+    const member = assignment.target;
+    const valueAsm = this.generateExpression(assignment.value);
+    if (valueAsm) {
+      this.lines.push(...this.addIndentToMultiLine(valueAsm));
+    }
+
+    const offset = this.getMemberOffset(member);
+    if (offset !== null) {
+      this.lines.push(`  si ${offset}              ; 赋值给 ${member.object.name}.${member.field}`);
+    } else {
+      this.lines.push(`  ; 未找到结构体字段 ${member.object.name}.${member.field}`);
+    }
+  }
+
+  private generateMemberExpression(member: any): string {
+    const offset = this.getMemberOffset(member);
+    if (offset === null) {
+      return 'mov eax, 0';
+    }
+    return `li ${offset}`;
+  }
+
+  private getMemberOffset(member: any): number | null {
+    const baseOffset = this.getVariableOffsetForAssignment(member.object.name);
+    if (baseOffset === null) {
+      return null;
+    }
+    const fieldOffset = typeof member.fieldOffset === 'number' ? member.fieldOffset : 0;
+    
+    // 获取结构体变量的大小
+    const structSize = this.scopeManager.getVariableSize(member.object.name);
+    if (structSize === null || structSize <= 1) {
+      // 如果不是结构体（size=1）或无法获取size，使用原来的计算方式
+      return baseOffset + fieldOffset;
+    }
+    
+    // 对于结构体，baseOffset 指向结构体的起始位置（最高地址）
+    // 字段应该从高地址向低地址排列：
+    // - 第一个字段（fieldOffset=0）应该在 baseOffset + (structSize - 1)
+    // - 第二个字段（fieldOffset=1）应该在 baseOffset + (structSize - 1 - 1)
+    // 公式：baseOffset + (structSize - 1 - fieldOffset)
+    return baseOffset + (structSize - 1 - fieldOffset);
+  }
   
   /**
    * 为赋值语句查找变量 offset
@@ -420,6 +484,18 @@ export class AssemblyGenerator {
           this.lines.push(`  si ${offset}              ; 赋值给 ${varName}`);
     } else {
           this.lines.push(`  ; 未找到变量 ${varName}`);
+        }
+        return;
+      } else if (target.type === 'MemberExpression') {
+        const valueAsm = this.generateExpression(assignment.right);
+        if (valueAsm) {
+          this.lines.push(...this.addIndentToMultiLine(valueAsm));
+        }
+        const offset = this.getMemberOffset(target);
+        if (offset !== null) {
+          this.lines.push(`  si ${offset}              ; 赋值给 ${target.object.name}.${target.field}`);
+        } else {
+          this.lines.push(`  ; 未找到结构体字段 ${target.object.name}.${target.field}`);
         }
         return;
       }
@@ -587,6 +663,8 @@ export class AssemblyGenerator {
         return this.generateAddressOfExpression(expression);
       case 'DereferenceExpression':
         return this.generateDereferenceExpression(expression);
+      case 'MemberExpression':
+        return this.generateMemberExpression(expression);
       case 'ParenthesizedExpression':
         // 括号表达式：直接递归处理内部表达式
         return this.generateExpression(expression.expression, forCondition);
@@ -771,6 +849,13 @@ export class AssemblyGenerator {
    */
   private addIndentToMultiLine(code: string, indent: string = '  '): string[] {
     return code.split('\n').map(line => line.trim() ? `${indent}${line}` : '').filter(line => line);
+  }
+
+  private getScopeAllocationSize(checkPoint: StartCheckPoint | EndCheckPoint): number {
+    if (checkPoint.variableSizes && checkPoint.variableSizes.length === checkPoint.variableNames.length) {
+      return checkPoint.variableSizes.reduce((sum, size) => sum + (size || 1), 0);
+    }
+    return checkPoint.variableNames.length;
   }
 
   /**

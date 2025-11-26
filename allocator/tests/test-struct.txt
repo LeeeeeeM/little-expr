@@ -1,0 +1,19 @@
+// 结构体测试用例
+// 测试功能：
+// 1. 结构体声明：struct Point { int x; int y; }
+// 2. 结构体变量声明：struct Point p;
+// 3. 成员访问：p.x, p.y
+// 4. 成员赋值：p.x = 10; p.y = 20;
+
+struct Point {
+  int x;
+  int y;
+};
+
+int main() {
+  struct Point p;
+  p.x = 10;
+  p.y = 20;
+  return p.x + p.y;  // 应该返回 30
+}
+

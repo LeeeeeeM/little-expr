@@ -1,0 +1,60 @@
+// 复杂结构体测试用例
+// 测试功能：
+// 1. 多个结构体定义
+// 2. 多个结构体变量
+// 3. 复杂的成员访问和计算
+// 4. 结构体变量之间的操作
+// 5. 嵌套的表达式计算
+
+struct Point {
+  int x;
+  int y;
+};
+
+struct Rectangle {
+  int width;
+  int height;
+};
+
+int main() {
+  struct Point p1;
+  struct Point p2;
+  struct Point p3;
+  struct Rectangle rect1;
+  struct Rectangle rect2;
+  
+  // 初始化 p1
+  p1.x = 1;
+  p1.y = 2;
+  
+  // 初始化 p2
+  p2.x = 4;
+  p2.y = 6;
+  
+  // 初始化 p3 (p1 和 p2 的中点)
+  p3.x = p1.x + p2.x;
+  p3.y = p1.y + p2.y;
+  
+  // 初始化矩形1
+  rect1.width = 5;
+  rect1.height = 10;
+  
+  // 初始化矩形2 (基于 p3 的坐标)
+  rect2.width = p3.x;
+  rect2.height = p3.y;
+  
+  // 计算距离的平方: (p2.x - p1.x)^2 + (p2.y - p1.y)^2
+  // = (4-1)^2 + (6-2)^2 = 3^2 + 4^2 = 9 + 16 = 25
+  int dx = p2.x - p1.x;
+  int dy = p2.y - p1.y;
+  int distSq = dx * dx + dy * dy;
+  
+  // 计算两个矩形的面积和
+  int area1 = rect1.width * rect1.height;  // 5 * 10 = 50
+  int area2 = rect2.width * rect2.height;  // 5 * 8 = 40
+  int totalArea = area1 + area2;           // 50 + 40 = 90
+  
+  // 返回：距离平方 + 总面积 = 25 + 90 = 115
+  return distSq + totalArea;
+}
+

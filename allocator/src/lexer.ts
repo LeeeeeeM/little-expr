@@ -29,6 +29,7 @@ export class StatementLexer {
     ['break', TokenType.BREAK],
     ['continue', TokenType.CONTINUE],
     ['int', TokenType.INT],
+    ['struct', TokenType.STRUCT],
     ['let', TokenType.LET],
     ['function', TokenType.FUNCTION],
     ['true', TokenType.NUMBER],  // 布尔值true用数字1表示
@@ -304,6 +305,12 @@ export class StatementLexer {
 
       case ':':
         this.addToken(TokenType.COLON, ':');
+        this.position++;
+        this.column++;
+        break;
+
+      case '.':
+        this.addToken(TokenType.DOT, '.');
         this.position++;
         this.column++;
         break;

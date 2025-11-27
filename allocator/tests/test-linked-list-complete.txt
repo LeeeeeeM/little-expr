@@ -1,0 +1,132 @@
+// 完整的链表操作示例
+// 使用结构体指针实现链表的创建、插入、遍历
+
+// 定义链表节点结构体
+struct Node {
+    int data;
+    struct Node *next;
+};
+
+// 在堆上创建新节点
+struct Node* createNode(int value) {
+    // 分配节点内存（2个字：data + next）
+    struct Node *newNode = alloc(2);
+    newNode->data = value;
+    newNode->next = 0;  // NULL
+    return newNode;
+}
+
+// 在链表头部插入节点
+struct Node* insertAtHead(struct Node *head, int value) {
+    struct Node *newNode = createNode(value);
+    newNode->next = head;
+    return newNode;
+}
+
+// 在链表尾部插入节点
+struct Node* insertAtTail(struct Node *head, int value) {
+    struct Node *newNode = createNode(value);
+    
+    // 如果链表为空
+    if (head == 0) {
+        return newNode;
+    }
+    
+    // 找到最后一个节点
+    struct Node *current = head;
+    while (current->next != 0) {
+        current = current->next;
+    }
+    
+    current->next = newNode;
+    return head;
+}
+
+// 计算链表长度
+int getLength(struct Node *head) {
+    int count = 0;
+    struct Node *current = head;
+    
+    while (current != 0) {
+        count = count + 1;
+        current = current->next;
+    }
+    
+    return count;
+}
+
+// 计算链表所有节点值的和
+int sumList(struct Node *head) {
+    int sum = 0;
+    struct Node *current = head;
+    
+    while (current != 0) {
+        sum = sum + current->data;
+        current = current->next;
+    }
+    
+    return sum;
+}
+
+// 获取指定位置的节点值
+int getValueAt(struct Node *head, int index) {
+    struct Node *current = head;
+    int i = 0;
+    
+    while (current != 0) {
+        if (i == index) {
+            return current->data;
+        }
+        i = i + 1;
+        current = current->next;
+    }
+    
+    return -1;  // 未找到
+}
+
+int main() {
+    // 创建空链表
+    struct Node *head = 0;
+    
+    // 测试1: 在尾部插入节点 -> [10]
+    head = insertAtTail(head, 10);
+    
+    // 测试2: 在尾部插入节点 -> [10, 20]
+    head = insertAtTail(head, 20);
+    
+    // 测试3: 在尾部插入节点 -> [10, 20, 30]
+    head = insertAtTail(head, 30);
+    
+    // 验证长度（应该是 3）
+    int length1 = getLength(head);
+    
+    // 验证总和（应该是 60）
+    int sum1 = sumList(head);
+    if (sum1 != 60) {
+        return -1;
+    }
+    
+    // 测试4: 在头部插入节点 -> [5, 10, 20, 30]
+    head = insertAtHead(head, 5);
+    
+    // 验证长度（应该是 4）
+    int length2 = getLength(head);
+    
+    // 验证总和（应该是 65）
+    int sum2 = sumList(head);
+    if (sum2 != 65) {
+        return -1;
+    }
+    
+    // 测试5: 获取各个位置的值
+    int val0 = getValueAt(head, 0);  // 应该是 5
+    int val1 = getValueAt(head, 1);  // 应该是 10
+    int val2 = getValueAt(head, 2);  // 应该是 20
+    int val3 = getValueAt(head, 3);  // 应该是 30
+    
+    // 验证所有获取的值的和（5 + 10 + 20 + 30 = 65）
+    int valSum = val0 + val1 + val2 + val3;
+    
+    // 返回最终的总和（应该是 65）
+    return sum2;
+}

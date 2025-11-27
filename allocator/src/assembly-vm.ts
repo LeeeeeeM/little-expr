@@ -106,7 +106,7 @@ export class AssemblyVM {
 
   // 运行虚拟机
   run(): { success: boolean; output: string; state: VMState } {
-    const MAX_CYCLES = 1000; // 最大执行周期
+    const MAX_CYCLES = 5000; // 最大执行周期
     
     try {
       while (!this.state.halted && this.state.pc < this.instructions.length && this.state.cycles < MAX_CYCLES) {

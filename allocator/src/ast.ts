@@ -1,7 +1,7 @@
 // AST节点定义
 // 为各种语句类型定义对应的AST节点
 
-import { StatementType, DataType } from './types';
+import { StatementType, DataType, type TypeInfo } from './types';
 
 // 基础AST节点接口
 export interface ASTNode {
@@ -119,7 +119,7 @@ export interface FunctionDeclaration extends ASTNode {
 export interface StructDeclaration extends ASTNode {
   type: 'StructDeclaration';
   name: string;
-  fields: Array<{ name: string; type: DataType }>;
+  fields: Array<{ name: string; type: DataType; typeInfo?: TypeInfo }>;
 }
 
 export interface IfStatement extends ASTNode {
@@ -398,7 +398,7 @@ export class ASTFactory {
 
   static createStructDeclaration(
     name: string,
-    fields: Array<{ name: string; type: DataType }>,
+    fields: Array<{ name: string; type: DataType; typeInfo?: TypeInfo }>,
     position?: number
   ): StructDeclaration {
     return {

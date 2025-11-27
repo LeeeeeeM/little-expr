@@ -1,0 +1,50 @@
+// 测试结构体中的指针字段
+// 这个测试展示了如何在结构体中定义各种类型的指针字段
+
+// 定义一个简单的 Node 结构体，包含 int 指针字段
+struct Node {
+    int value;
+    int *next;      // 指向 int 的指针
+};
+
+// 定义一个链表节点结构体，包含结构体指针字段
+struct ListNode {
+    int data;
+    struct Node *nodePtr;   // 指向 Node 结构体的指针
+};
+
+// 定义一个复杂的结构体，包含多级指针
+struct Complex {
+    int x;
+    int *ptr;       // 一级指针
+    int **pptr;     // 二级指针
+    struct Node *node;  // 结构体指针
+};
+
+int main() {
+    // 测试 1: 创建一个包含指针字段的结构体变量
+    struct Node n1;
+    n1.value = 42;
+    
+    int addr = 100;
+    n1.next = &addr;  // 将指针字段设置为某个地址
+    
+    // 测试 2: 使用结构体指针
+    struct ListNode ln;
+    ln.data = 99;
+    ln.nodePtr = &n1;  // 指向 n1
+    
+    // 测试 3: 多级指针字段
+    struct Complex c;
+    c.x = 10;
+    
+    int val = 20;
+    c.ptr = &val;
+    
+    int *p = &val;
+    c.pptr = &p;  // 二级指针
+    
+    c.node = &n1;
+    
+    return 0;
+}

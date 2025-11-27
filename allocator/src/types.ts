@@ -134,6 +134,7 @@ export interface StructField {
   name: string;
   type: DataType;
   offset: number;
+  typeInfo?: TypeInfo;  // 完整的类型信息（支持指针类型）
 }
 
 export interface StructDefinition {

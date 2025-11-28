@@ -1,0 +1,10 @@
+// 测试用例：无参数函数传递参数（应该报错）
+int getValue() {
+    return 42;
+}
+
+int main() {
+    int result = getValue(1);  // 传递了参数，但函数不需要参数，应该报错
+    return result;
+}
+

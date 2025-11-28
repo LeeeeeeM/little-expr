@@ -1,0 +1,10 @@
+// 测试用例：无参数函数调用
+int getValue() {
+    return 42;
+}
+
+int main() {
+    int result = getValue();
+    return result;
+}
+

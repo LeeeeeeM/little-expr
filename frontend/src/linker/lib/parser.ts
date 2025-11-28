@@ -34,7 +34,7 @@ export interface ParseResult {
 export class StatementParser {
   private lexer: StatementLexer;
   private errors: ParseError[] = [];
-  private declaredFunctions: Set<string> = new Set(); // 跟踪已声明的函数
+  private declaredFunctions: Map<string, { parameterCount: number }> = new Map(); // 跟踪已声明的函数及参数数量
   private scopeStack: Array<Set<string>> = [];
 
   constructor(source: string) {
@@ -63,11 +63,21 @@ export class StatementParser {
               const funcName = nextToken.value as string;
               // 检查是否是函数声明（分号）还是函数定义（大括号）
               const fourthToken = this.lexer.peek(3);
-              if (fourthToken?.type === TokenType.SEMICOLON) {
-                this.declaredFunctions.add(funcName);
-              } else if (fourthToken?.type === TokenType.LBRACE) {
-                // 函数定义也算作声明
-                this.declaredFunctions.add(funcName);
+              if (fourthToken?.type === TokenType.SEMICOLON || fourthToken?.type === TokenType.LBRACE) {
+                // 跳过函数关键字和函数名，到达 '('
+                this.lexer.advance(); // 跳过 INT/FUNCTION
+                this.lexer.advance(); // 跳过函数名
+                // 解析参数列表以获取参数数量
+                const paramCount = this.parseParameterCount();
+                this.declaredFunctions.set(funcName, { parameterCount: paramCount });
+                // 如果是函数定义，跳过函数体
+                if (fourthToken?.type === TokenType.LBRACE) {
+                  this.skipFunctionBody();
+                } else {
+                  // 如果是函数声明，跳过分号
+                  this.lexer.advance(); // 跳过 SEMICOLON
+                }
+                continue;
               }
             }
           }
@@ -230,15 +240,19 @@ export class StatementParser {
       // 创建一个空的函数体
       const emptyBody = ASTFactory.createBlockStatement([]);
       
-      // 注册函数声明
-      this.declaredFunctions.add(name);
+      // 注册函数声明（第二遍扫描时，如果第一遍扫描已经收集过，这里不需要重复）
+      if (!this.declaredFunctions.has(name)) {
+        this.declaredFunctions.set(name, { parameterCount: parameters.length });
+      }
       
       // 函数声明（只有声明，没有定义）
       return ASTFactory.createFunctionDeclaration(name, returnType, parameters, emptyBody, line, column, true);
     } else {
       // 函数定义：int name() { ... }
-      // 注册函数定义（也算作声明）
-      this.declaredFunctions.add(name);
+      // 注册函数定义（也算作声明）（第二遍扫描时，如果第一遍扫描已经收集过，这里不需要重复）
+      if (!this.declaredFunctions.has(name)) {
+        this.declaredFunctions.set(name, { parameterCount: parameters.length });
+      }
       
       const paramNames = parameters.map(p => p.name);
       const body = this.parseBlockStatement(paramNames);
@@ -595,6 +609,21 @@ export class StatementParser {
     }
     
     this.expect(TokenType.RIGHTPAREN);
+    
+    // 检查参数数量是否匹配
+    const funcInfo = this.declaredFunctions.get(funcName);
+    if (funcInfo) {
+      const expectedParams = funcInfo.parameterCount;
+      const actualArgs = args.length;
+      if (expectedParams !== actualArgs) {
+        this.addErrorAt(
+          `Function '${funcName}' expects ${expectedParams} argument(s), but ${actualArgs} were provided`,
+          line,
+          column
+        );
+      }
+    }
+    
     return ASTFactory.createFunctionCall(callee, args, line, column);
   }
 
@@ -712,6 +741,53 @@ export class StatementParser {
   private ensureIdentifierDeclared(name: string, line?: number, column?: number): void {
     if (!this.isIdentifierDeclared(name)) {
       this.addErrorAt(`Undefined identifier: ${name}`, line, column);
+    }
+  }
+
+  // 解析参数数量（用于第一遍扫描）
+  private parseParameterCount(): number {
+    if (this.lexer.getCurrentToken()?.type !== TokenType.LEFTPAREN) {
+      return 0;
+    }
+    this.lexer.advance(); // 跳过 '('
+    
+    if (this.lexer.getCurrentToken()?.type === TokenType.RIGHTPAREN) {
+      this.lexer.advance(); // 跳过 ')'
+      return 0;
+    }
+    
+    let count = 1; // 至少有一个参数
+    this.parseDataType(); // 跳过类型
+    this.parseIdentifierName(); // 跳过参数名
+    
+    while (this.lexer.getCurrentToken()?.type === TokenType.COMMA) {
+      this.lexer.advance(); // 跳过 ','
+      this.parseDataType(); // 跳过类型
+      this.parseIdentifierName(); // 跳过参数名
+      count++;
+    }
+    
+    this.expect(TokenType.RIGHTPAREN); // 跳过 ')'
+    return count;
+  }
+
+  // 跳过函数体（用于第一遍扫描）
+  private skipFunctionBody(): void {
+    if (this.lexer.getCurrentToken()?.type !== TokenType.LBRACE) {
+      return;
+    }
+    
+    let depth = 1;
+    this.lexer.advance(); // 跳过 '{'
+    
+    while (depth > 0 && !this.lexer.isAtEnd()) {
+      const token = this.lexer.getCurrentToken();
+      if (token?.type === TokenType.LBRACE) {
+        depth++;
+      } else if (token?.type === TokenType.RBRACE) {
+        depth--;
+      }
+      this.lexer.advance();
     }
   }
 }

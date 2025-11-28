@@ -1,0 +1,10 @@
+// 测试用例：参数数量过多
+int subtract(int a, int b) {
+    return a - b;
+}
+
+int main() {
+    int result = subtract(10, 5, 3);  // 传了3个参数，只需要2个，应该报错
+    return result;
+}
+

@@ -35,6 +35,7 @@ export class StatementParser {
   private lexer: StatementLexer;
   private errors: ParseError[] = [];
   private scopeStack: Array<Set<string>> = [];
+  private functions: Map<string, { parameters: Array<{ name: string; type: string }> }> = new Map();
 
   constructor(source: string) {
     this.lexer = new StatementLexer(source);
@@ -44,15 +45,52 @@ export class StatementParser {
     this.errors = [];
     this.lexer.reset();
     this.scopeStack = [];
+    this.functions.clear();
     this.enterScope(); // 全局作用域
 
     try {
       const statements: Statement[] = [];
       
+      // 第一遍：收集所有函数声明（用于支持前向引用）
+      const savedPosition = this.lexer.getCurrentPosition();
+      while (!this.lexer.isAtEnd()) {
+        const token = this.lexer.getCurrentToken();
+        if (token?.type === TokenType.INT || token?.type === TokenType.FUNCTION) {
+          const nextToken = this.lexer.getNextToken();
+          if (nextToken?.type === TokenType.IDENTIFIER) {
+            const thirdToken = this.lexer.peek(2);
+            if (thirdToken?.type === TokenType.LEFTPAREN) {
+              const funcName = nextToken.value as string;
+              // 跳过函数关键字和函数名，到达 '('
+              this.lexer.advance(); // 跳过 INT/FUNCTION
+              this.lexer.advance(); // 跳过函数名
+              // 解析参数列表
+              const paramCount = this.parseParameterCount();
+              this.functions.set(funcName, { parameters: Array.from({ length: paramCount }, (_, i) => ({ name: `arg${i}`, type: 'int' })) });
+              // 跳过函数体或声明
+              this.skipFunctionOrDeclaration();
+              continue;
+            }
+          }
+        }
+        this.lexer.advance();
+      }
+      
+      // 重置到开始位置
+      this.lexer.setPosition(savedPosition);
+      
+      // 第二遍：解析并检查
       while (!this.lexer.isAtEnd()) {
         const statement = this.parseStatement();
         if (statement) {
           statements.push(statement);
+          // 如果是函数声明，也存储参数信息（用于更新）
+          if (statement.type === 'FunctionDeclaration') {
+            const funcDecl = statement as any;
+            if (funcDecl.parameters) {
+              this.functions.set(funcDecl.name, { parameters: funcDecl.parameters });
+            }
+          }
         }
       }
 
@@ -70,6 +108,7 @@ export class StatementParser {
       };
     } finally {
       this.scopeStack = [];
+      this.functions.clear();
     }
   }
 
@@ -537,6 +576,21 @@ export class StatementParser {
     }
     
     this.expect(TokenType.RIGHTPAREN);
+    
+    // 检查参数数量是否匹配
+    const funcInfo = this.functions.get(callee.name);
+    if (funcInfo) {
+      const expectedParams = funcInfo.parameters.length;
+      const actualArgs = args.length;
+      if (expectedParams !== actualArgs) {
+        this.addErrorAt(
+          `Function '${callee.name}' expects ${expectedParams} argument(s), but ${actualArgs} were provided`,
+          line,
+          column
+        );
+      }
+    }
+    
     return ASTFactory.createFunctionCall(callee, args, line, column);
   }
 
@@ -654,6 +708,59 @@ export class StatementParser {
   private ensureIdentifierDeclared(name: string, line?: number, column?: number): void {
     if (!this.isIdentifierDeclared(name)) {
       this.addErrorAt(`Undefined identifier: ${name}`, line, column);
+    }
+  }
+
+  // 解析参数数量（用于第一遍扫描）
+  private parseParameterCount(): number {
+    if (this.lexer.getCurrentToken()?.type !== TokenType.LEFTPAREN) {
+      return 0;
+    }
+    this.lexer.advance(); // 跳过 '('
+    
+    if (this.lexer.getCurrentToken()?.type === TokenType.RIGHTPAREN) {
+      this.lexer.advance(); // 跳过 ')'
+      return 0;
+    }
+    
+    let count = 1; // 至少有一个参数
+    this.parseDataType(); // 跳过类型
+    this.parseIdentifierName(); // 跳过参数名
+    
+    while (this.lexer.getCurrentToken()?.type === TokenType.COMMA) {
+      this.lexer.advance(); // 跳过 ','
+      this.parseDataType(); // 跳过类型
+      this.parseIdentifierName(); // 跳过参数名
+      count++;
+    }
+    
+    this.expect(TokenType.RIGHTPAREN); // 跳过 ')'
+    return count;
+  }
+
+  // 跳过函数体或函数声明（用于第一遍扫描）
+  private skipFunctionOrDeclaration(): void {
+    const token = this.lexer.getCurrentToken();
+    if (token?.type === TokenType.SEMICOLON) {
+      // 函数声明，跳过分号
+      this.lexer.advance();
+      return;
+    }
+    
+    if (token?.type === TokenType.LBRACE) {
+      // 函数定义，跳过函数体
+      let depth = 1;
+      this.lexer.advance(); // 跳过 '{'
+      
+      while (depth > 0 && !this.lexer.isAtEnd()) {
+        const currentToken = this.lexer.getCurrentToken();
+        if (currentToken?.type === TokenType.LBRACE) {
+          depth++;
+        } else if (currentToken?.type === TokenType.RBRACE) {
+          depth--;
+        }
+        this.lexer.advance();
+      }
     }
   }
 }

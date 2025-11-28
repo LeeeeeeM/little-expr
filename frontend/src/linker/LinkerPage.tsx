@@ -236,6 +236,26 @@ const LinkerPage: React.FC = () => {
                   }
                 }
               }
+              // 在 VariableDeclaration 中查找（检查 initializer）
+              else if (stmt.type === 'VariableDeclaration' && (stmt as any).initializer) {
+                const calls = findFunctionCallsInExpression((stmt as any).initializer);
+                for (const calledFuncName of calls) {
+                  if (!calledFunctions.has(calledFuncName)) {
+                    calledFunctions.add(calledFuncName);
+                    collectCalledFunctions(calledFuncName);
+                  }
+                }
+              }
+              // 在 LetDeclaration 中查找（检查 initializer）
+              else if (stmt.type === 'LetDeclaration' && (stmt as any).initializer) {
+                const calls = findFunctionCallsInExpression((stmt as any).initializer);
+                for (const calledFuncName of calls) {
+                  if (!calledFunctions.has(calledFuncName)) {
+                    calledFunctions.add(calledFuncName);
+                    collectCalledFunctions(calledFuncName);
+                  }
+                }
+              }
             }
           }
         };

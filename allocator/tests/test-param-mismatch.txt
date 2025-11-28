@@ -1,0 +1,9 @@
+int multiply(int a, int b) {
+    return a * b;
+}
+
+int main() {
+    int result = multiply(5);  // 只传了1个参数，但函数定义需要2个
+    return result;
+}
+

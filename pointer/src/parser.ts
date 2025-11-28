@@ -927,6 +927,22 @@ export class StatementParser {
     }
     
     this.expect(TokenType.RIGHTPAREN);
+    
+    // 检查参数数量是否匹配
+    if (functionInfo) {
+      const expectedParams = functionInfo.parameters.length;
+      const actualArgs = args.length;
+      if (expectedParams !== actualArgs) {
+        const token = this.lexer.getCurrentToken();
+        this.errors.push({
+          message: `Function '${funcName}' expects ${expectedParams} argument(s), but ${actualArgs} were provided`,
+          position: token?.position || 0,
+          line: token?.line || 1,
+          column: token?.column || 1
+        });
+      }
+    }
+    
     return ASTFactory.createFunctionCall(callee, args);
   }
 

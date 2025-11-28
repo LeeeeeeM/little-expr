@@ -1,0 +1,10 @@
+// 测试用例：参数数量不足
+int add(int x, int y, int z) {
+    return x + y + z;
+}
+
+int main() {
+    int result = add(10, 20);  // 只传了2个参数，需要3个，应该报错
+    return result;
+}
+

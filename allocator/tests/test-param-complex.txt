@@ -1,0 +1,15 @@
+int multiply(int a, int b) {
+    return a * b;
+}
+
+int add(int x, int y, int z) {
+    return x + y + z;
+}
+
+int main() {
+    int a = 30;
+    int result = add(10, 20, a);
+    result = multiply(result, 2) + 1;
+    return result;
+}
+

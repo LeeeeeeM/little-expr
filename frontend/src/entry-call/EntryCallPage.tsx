@@ -241,7 +241,7 @@ const EntryCallPage: React.FC = () => {
         setOriginalAssemblyCode(mergedAssemblyCode);
         
         setIsRunning(false);
-        setSuccessMessage(`编译成功！生成了 ${compileResult.cfgs.length} 个函数的 CFG 和汇编代码`);
+        setSuccessMessage(`编译成功！生成了 ${compileResult.cfgs.length} 个函数的 CFG`);
       } else {
         setIsRunning(false);
         setErrorMessage('未找到函数定义');

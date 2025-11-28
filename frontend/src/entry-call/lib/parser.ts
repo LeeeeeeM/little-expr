@@ -34,6 +34,7 @@ export interface ParseResult {
 export class StatementParser {
   private lexer: StatementLexer;
   private errors: ParseError[] = [];
+  private scopeStack: Array<Set<string>> = [];
 
   constructor(source: string) {
     this.lexer = new StatementLexer(source);
@@ -42,6 +43,8 @@ export class StatementParser {
   public parse(): ParseResult {
     this.errors = [];
     this.lexer.reset();
+    this.scopeStack = [];
+    this.enterScope(); // 全局作用域
 
     try {
       const statements: Statement[] = [];
@@ -65,6 +68,8 @@ export class StatementParser {
         ast: ASTFactory.createProgram([]),
         errors: this.errors,
       };
+    } finally {
+      this.scopeStack = [];
     }
   }
 
@@ -130,6 +135,7 @@ export class StatementParser {
     this.expect(TokenType.INT);
     const dataType = DataType.INT;
     const name = this.parseIdentifierName();
+    this.declareIdentifier(name);
     
     let initializer: Expression | undefined;
     if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
@@ -148,6 +154,7 @@ export class StatementParser {
 
     this.lexer.advance(); // 跳过 'let'
     const name = this.parseIdentifierName();
+    this.declareIdentifier(name);
     
     let initializer: Expression | undefined;
     if (this.lexer.getCurrentToken()?.type === TokenType.ASSIGN) {
@@ -183,8 +190,9 @@ export class StatementParser {
     this.expect(TokenType.LEFTPAREN);
     const parameters = this.parseParameterList();
     this.expect(TokenType.RIGHTPAREN);
+    const paramNames = parameters.map(p => p.name);
     
-    const body = this.parseBlockStatement();
+    const body = this.parseBlockStatement(paramNames);
     return ASTFactory.createFunctionDeclaration(name, returnType, parameters, body, line, column);
   }
 
@@ -296,7 +304,7 @@ export class StatementParser {
     return ASTFactory.createReturnStatement(value, line, column);
   }
 
-  private parseBlockStatement(): BlockStatement {
+  private parseBlockStatement(preDeclaredNames: string[] = []): BlockStatement {
     const token = this.lexer.getCurrentToken();
     const line = token?.line;
     const column = token?.column;
@@ -304,15 +312,20 @@ export class StatementParser {
     this.expect(TokenType.LBRACE);
     
     const statements: Statement[] = [];
-    while (this.lexer.getCurrentToken()?.type !== TokenType.RBRACE && !this.lexer.isAtEnd()) {
-      const statement = this.parseStatement();
-      if (statement) {
-        statements.push(statement);
+    this.enterScope(preDeclaredNames);
+    try {
+      while (this.lexer.getCurrentToken()?.type !== TokenType.RBRACE && !this.lexer.isAtEnd()) {
+        const statement = this.parseStatement();
+        if (statement) {
+          statements.push(statement);
+        }
       }
+      
+      this.expect(TokenType.RBRACE);
+      return ASTFactory.createBlockStatement(statements, line, column);
+    } finally {
+      this.exitScope();
     }
-    
-    this.expect(TokenType.RBRACE);
-    return ASTFactory.createBlockStatement(statements, line, column);
   }
 
   private parseExpression(): Expression {
@@ -491,6 +504,8 @@ export class StatementParser {
           return this.parseFunctionCall(identifier);
         }
         
+        this.ensureIdentifierDeclared(identifier.name, identifier.line, identifier.column);
+        
         return identifier;
         
       case TokenType.LEFTPAREN:
@@ -594,6 +609,52 @@ export class StatementParser {
       line: token?.line,
       column: token?.column,
     });
+  }
+
+  private addErrorAt(message: string, line?: number, column?: number): void {
+    this.errors.push({
+      message,
+      position: 0,
+      line,
+      column,
+    });
+  }
+
+  private enterScope(preDeclaredNames: string[] = []): void {
+    const scope = new Set<string>();
+    for (const name of preDeclaredNames) {
+      scope.add(name);
+    }
+    this.scopeStack.push(scope);
+  }
+
+  private exitScope(): void {
+    if (this.scopeStack.length > 0) {
+      this.scopeStack.pop();
+    }
+  }
+
+  private declareIdentifier(name: string): void {
+    if (this.scopeStack.length === 0) {
+      this.enterScope();
+    }
+    const currentScope = this.scopeStack[this.scopeStack.length - 1]!;
+    currentScope.add(name);
+  }
+
+  private isIdentifierDeclared(name: string): boolean {
+    for (let i = this.scopeStack.length - 1; i >= 0; i--) {
+      if (this.scopeStack[i]!.has(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private ensureIdentifierDeclared(name: string, line?: number, column?: number): void {
+    if (!this.isIdentifierDeclared(name)) {
+      this.addErrorAt(`Undefined identifier: ${name}`, line, column);
+    }
   }
 }
 
